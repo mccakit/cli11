@@ -18,13 +18,14 @@ using tchar = char;
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
-#include "catch.hpp"
+
+#include "catch_helper.hpp"
 import std;
 import cli11;
 import test_helper;
 
-
-TEST_CASE_METHOD(TApp, "OneFlagShort", "[app]") {
+TEST_CASE_METHOD(TApp, "OneFlagShort", "[app]")
+{
     app.add_flag("-c,--count");
     args = {"-c"};
     run();
@@ -32,7 +33,8 @@ TEST_CASE_METHOD(TApp, "OneFlagShort", "[app]") {
     CHECK(app.count("--count") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagShortValues", "[app]") {
+TEST_CASE_METHOD(TApp, "OneFlagShortValues", "[app]")
+{
     app.add_flag("-c{v1},--count{v2}");
     args = {"-c"};
     run();
@@ -44,7 +46,8 @@ TEST_CASE_METHOD(TApp, "OneFlagShortValues", "[app]") {
     CHECK_THROWS_AS(app["--invalid"], CLI::OptionNotFound);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagShortValuesAs", "[app]") {
+TEST_CASE_METHOD(TApp, "OneFlagShortValuesAs", "[app]")
+{
     auto *flg = app.add_flag("-c{1},--count{2}");
     args = {"-c"};
     run();
@@ -82,7 +85,8 @@ TEST_CASE_METHOD(TApp, "OneFlagShortValuesAs", "[app]") {
     CHECK(1 == vec[1]);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagShortWindows", "[app]") {
+TEST_CASE_METHOD(TApp, "OneFlagShortWindows", "[app]")
+{
     app.add_flag("-c,--count");
     args = {"/c"};
     app.allow_windows_style_options();
@@ -91,14 +95,16 @@ TEST_CASE_METHOD(TApp, "OneFlagShortWindows", "[app]") {
     CHECK(app.count("--count") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "CountNonExist", "[app]") {
+TEST_CASE_METHOD(TApp, "CountNonExist", "[app]")
+{
     app.add_flag("-c,--count");
     args = {"-c"};
     run();
     CHECK_THROWS_AS(app.count("--nonexist"), CLI::OptionNotFound);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagLong", "[app]") {
+TEST_CASE_METHOD(TApp, "OneFlagLong", "[app]")
+{
     app.add_flag("-c,--count");
     args = {"--count"};
     run();
@@ -106,7 +112,8 @@ TEST_CASE_METHOD(TApp, "OneFlagLong", "[app]") {
     CHECK(app.count("--count") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "DashedOptions", "[app]") {
+TEST_CASE_METHOD(TApp, "DashedOptions", "[app]")
+{
     app.add_flag("-c");
     app.add_flag("--q");
     app.add_flag("--this,--that");
@@ -119,7 +126,8 @@ TEST_CASE_METHOD(TApp, "DashedOptions", "[app]") {
     CHECK(app.count("--that") == 2u);
 }
 
-TEST_CASE_METHOD(TApp, "DashedOptionsSingleString", "[app]") {
+TEST_CASE_METHOD(TApp, "DashedOptionsSingleString", "[app]")
+{
     app.add_flag("-c");
     app.add_flag("--q");
     app.add_flag("--this,--that");
@@ -131,7 +139,8 @@ TEST_CASE_METHOD(TApp, "DashedOptionsSingleString", "[app]") {
     CHECK(app.count("--that") == 2u);
 }
 
-TEST_CASE_METHOD(TApp, "StrangeFlagNames", "[app]") {
+TEST_CASE_METHOD(TApp, "StrangeFlagNames", "[app]")
+{
     app.add_flag("-=");
     app.add_flag("--t\tt");
     app.add_flag("-{");
@@ -142,16 +151,20 @@ TEST_CASE_METHOD(TApp, "StrangeFlagNames", "[app]") {
     CHECK(app.count("--t\tt") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "RequireOptionsError", "[app]") {
+TEST_CASE_METHOD(TApp, "RequireOptionsError", "[app]")
+{
     app.add_flag("-c");
     app.add_flag("--q");
     app.add_flag("--this,--that");
     app.set_help_flag("-h,--help");
     app.set_help_all_flag("--help_all");
     app.require_option(1, 2);
-    try {
+    try
+    {
         app.parse("-c --q --this --that");
-    } catch(const CLI::RequiredError &re) {
+    }
+    catch (const CLI::RequiredError &re)
+    {
         CHECK_THAT(re.what(), !Contains("-h,--help"));
         CHECK_THAT(re.what(), !Contains("help_all"));
     }
@@ -160,8 +173,9 @@ TEST_CASE_METHOD(TApp, "RequireOptionsError", "[app]") {
     CHECK_NOTHROW(app.parse("-c --this --that"));
 }
 
-TEST_CASE_METHOD(TApp, "BoolFlagOverride", "[app]") {
-    bool val{false};
+TEST_CASE_METHOD(TApp, "BoolFlagOverride", "[app]")
+{
+    bool val {false};
     auto *flg = app.add_flag("--this,--that", val);
 
     app.parse("--this");
@@ -180,8 +194,9 @@ TEST_CASE_METHOD(TApp, "BoolFlagOverride", "[app]") {
     CHECK_NOTHROW(app.parse("--this={}"));
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagRef", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "OneFlagRef", "[app]")
+{
+    int ref {0};
     app.add_flag("-c,--count", ref);
     args = {"--count"};
     run();
@@ -190,8 +205,9 @@ TEST_CASE_METHOD(TApp, "OneFlagRef", "[app]") {
     CHECK(ref == 1);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagRefValue", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "OneFlagRefValue", "[app]")
+{
+    int ref {0};
     app.add_flag("-c,--count", ref);
     args = {"--count=7"};
     run();
@@ -200,8 +216,9 @@ TEST_CASE_METHOD(TApp, "OneFlagRefValue", "[app]") {
     CHECK(ref == 7);
 }
 
-TEST_CASE_METHOD(TApp, "OneFlagRefValueFalse", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "OneFlagRefValueFalse", "[app]")
+{
+    int ref {0};
     auto *flg = app.add_flag("-c,--count", ref);
     args = {"--count=false"};
     run();
@@ -220,8 +237,9 @@ TEST_CASE_METHOD(TApp, "OneFlagRefValueFalse", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ConversionError);
 }
 
-TEST_CASE_METHOD(TApp, "FlagNegation", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "FlagNegation", "[app]")
+{
+    int ref {0};
     auto *flg = app.add_flag("-c,--count,--ncount{false}", ref);
     args = {"--count", "-c", "--ncount"};
     CHECK(!flg->check_fname("count"));
@@ -233,8 +251,9 @@ TEST_CASE_METHOD(TApp, "FlagNegation", "[app]") {
     CHECK(ref == 1);
 }
 
-TEST_CASE_METHOD(TApp, "FlagNegationShortcutNotation", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "FlagNegationShortcutNotation", "[app]")
+{
+    int ref {0};
     app.add_flag("-c,--count{true},!--ncount", ref);
     args = {"--count=TRUE", "-c", "--ncount"};
     run();
@@ -244,14 +263,16 @@ TEST_CASE_METHOD(TApp, "FlagNegationShortcutNotation", "[app]") {
     CHECK(ref == 1);
 }
 
-TEST_CASE_METHOD(TApp, "FlagNegationShortcutNotationInvalid", "[app]") {
-    int ref{0};
+TEST_CASE_METHOD(TApp, "FlagNegationShortcutNotationInvalid", "[app]")
+{
+    int ref {0};
     app.add_flag("-c,--count,!--ncount", ref);
     args = {"--ncount=happy"};
     CHECK_THROWS_AS(run(), CLI::ConversionError);
 }
 
-TEST_CASE_METHOD(TApp, "OneString", "[app]") {
+TEST_CASE_METHOD(TApp, "OneString", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     args = {"--string", "mystring"};
@@ -261,7 +282,8 @@ TEST_CASE_METHOD(TApp, "OneString", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneWideString", "[app]") {
+TEST_CASE_METHOD(TApp, "OneWideString", "[app]")
+{
     std::wstring str;
     app.add_option("-s,--string", str);
     args = {"--string", "mystring"};
@@ -271,11 +293,12 @@ TEST_CASE_METHOD(TApp, "OneWideString", "[app]") {
     CHECK(L"mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringWideInput", "[app][unicode]") {
+TEST_CASE_METHOD(TApp, "OneStringWideInput", "[app][unicode]")
+{
     std::string str;
     app.add_option("-s,--string", str);
 
-    std::array<const wchar_t *, 3> cmdline{{L"app", L"--string", L"mystring"}};
+    std::array<const wchar_t *, 3> cmdline {{L"app", L"--string", L"mystring"}};
     app.parse(static_cast<int>(cmdline.size()), cmdline.data());
 
     CHECK(app.count("-s") == 1u);
@@ -283,7 +306,8 @@ TEST_CASE_METHOD(TApp, "OneStringWideInput", "[app][unicode]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringWindowsStyle", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringWindowsStyle", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     args = {"/string", "mystring"};
@@ -294,7 +318,8 @@ TEST_CASE_METHOD(TApp, "OneStringWindowsStyle", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringSingleStringInput", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringSingleStringInput", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
 
@@ -304,7 +329,8 @@ TEST_CASE_METHOD(TApp, "OneStringSingleStringInput", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringSingleWideStringInput", "[app][unicode]") {
+TEST_CASE_METHOD(TApp, "OneStringSingleWideStringInput", "[app][unicode]")
+{
     std::string str;
     app.add_option("-s,--string", str);
 
@@ -314,7 +340,8 @@ TEST_CASE_METHOD(TApp, "OneStringSingleWideStringInput", "[app][unicode]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersion", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersion", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     args = {"--string=mystring"};
@@ -324,7 +351,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersion", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionWindowsStyle", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionWindowsStyle", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     args = {"/string:mystring"};
@@ -335,7 +363,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionWindowsStyle", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleString", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleString", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     app.parse("--string=mystring");
@@ -344,7 +373,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleString", "[app]") {
     CHECK("mystring" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuoted", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuoted", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     app.parse(R"raw(--string="this is my quoted string")raw");
@@ -353,7 +383,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuoted", "[app]") {
     CHECK("this is my quoted string" == str);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultiple", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultiple", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -364,7 +395,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultiple", "[app]
     CHECK("\"quoted string\"" == str3);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqual", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqual", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -380,7 +412,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqual", "[app]"
     CHECK("\"quoted string\"" == str3);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqualWindowsStyle", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqualWindowsStyle", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -397,7 +430,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringEmbeddedEqualWindowsSty
     CHECK("\"quoted string\"" == str3);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleMixedStyle", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleMixedStyle", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -409,7 +443,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleMixedStyl
     CHECK("\"quoted string\"" == str3);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleInMiddle", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleInMiddle", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -420,18 +455,20 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleInMiddle"
     CHECK("\"quoted string\"" == str3);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedEscapedCharacters", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedEscapedCharacters", "[app]")
+{
     std::string str, str2, str3;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
     app.add_option("-m,--mstr", str3);
     app.parse(R"raw(--string="this is my \n\"quoted\" string" -t 'qst\ring 2' -m=`"quoted\n string"`")raw");
-    CHECK("this is my \n\"quoted\" string" == str);  // escaped
-    CHECK("qst\\ring 2" == str2);                    // literal
-    CHECK("\"quoted\\n string\"" == str3);           // double quoted literal
+    CHECK("this is my \n\"quoted\" string" == str); // escaped
+    CHECK("qst\\ring 2" == str2);                   // literal
+    CHECK("\"quoted\\n string\"" == str3);          // double quoted literal
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqual", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqual", "[app]")
+{
     std::string str, str2, str3, str4;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -444,7 +481,8 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqual
     CHECK("Unquoted" == str4);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqualAndProgram", "[app]") {
+TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqualAndProgram", "[app]")
+{
     std::string str, str2, str3, str4;
     app.add_option("-s,--string", str);
     app.add_option("-t,--tstr", str2);
@@ -459,8 +497,9 @@ TEST_CASE_METHOD(TApp, "OneStringEqualVersionSingleStringQuotedMultipleWithEqual
     CHECK("Unquoted" == str4);
 }
 
-TEST_CASE_METHOD(TApp, "OneStringFlagLike", "[app]") {
-    std::string str{"something"};
+TEST_CASE_METHOD(TApp, "OneStringFlagLike", "[app]")
+{
+    std::string str {"something"};
     app.add_option("-s,--string", str)->expected(0, 1);
     args = {"--string"};
     run();
@@ -469,8 +508,9 @@ TEST_CASE_METHOD(TApp, "OneStringFlagLike", "[app]") {
     CHECK(str.empty());
 }
 
-TEST_CASE_METHOD(TApp, "OneIntFlagLike", "[app]") {
-    int val{0};
+TEST_CASE_METHOD(TApp, "OneIntFlagLike", "[app]")
+{
+    int val {0};
     auto *opt = app.add_option("-i", val)->expected(0, 1);
     args = {"-i"};
     run();
@@ -484,61 +524,66 @@ TEST_CASE_METHOD(TApp, "OneIntFlagLike", "[app]") {
     CHECK(9 == val);
 }
 
-TEST_CASE_METHOD(TApp, "PairDefault", "[app]") {
-    std::pair<double, std::string> pr{57.5, "test"};
+TEST_CASE_METHOD(TApp, "PairDefault", "[app]")
+{
+    std::pair<double, std::string> pr {57.5, "test"};
     auto *opt = app.add_option("-i", pr)->expected(0, 2);
     args = {"-i"};
     run();
     CHECK(app.count("-i") == 1u);
 
-    std::pair<double, std::string> pr2{92.5, "t2"};
+    std::pair<double, std::string> pr2 {92.5, "t2"};
     opt->default_val(pr2);
     run();
     CHECK(pr == pr2);
 }
 
-TEST_CASE_METHOD(TApp, "TupleDefault", "[app]") {
-    std::tuple<double, std::string, int, std::string> pr{57.5, "test", 5, "total"};
+TEST_CASE_METHOD(TApp, "TupleDefault", "[app]")
+{
+    std::tuple<double, std::string, int, std::string> pr {57.5, "test", 5, "total"};
     auto *opt = app.add_option("-i", pr)->expected(0, 4);
     args = {"-i"};
     run();
     CHECK(app.count("-i") == 1u);
 
-    std::tuple<double, std::string, int, std::string> pr2{99.5, "test2", 87, "total3"};
+    std::tuple<double, std::string, int, std::string> pr2 {99.5, "test2", 87, "total3"};
     opt->default_val(pr2);
     run();
     CHECK(pr == pr2);
 }
 
-TEST_CASE_METHOD(TApp, "TupleDefaultSingle", "[app]") {
-    std::tuple<std::string> pr{"test_tuple"};
+TEST_CASE_METHOD(TApp, "TupleDefaultSingle", "[app]")
+{
+    std::tuple<std::string> pr {"test_tuple"};
     auto *opt = app.add_option("-i", pr)->expected(0, 1);
     args = {"-i"};
     run();
     CHECK(app.count("-i") == 1u);
 
-    std::tuple<std::string> pr2{"total3"};
+    std::tuple<std::string> pr2 {"total3"};
     opt->default_val(pr2);
     run();
     CHECK(pr == pr2);
 }
 
-TEST_CASE_METHOD(TApp, "TupleComplex", "[app]") {
-    std::tuple<double, std::string, int, std::pair<std::string, std::string>> pr{57.5, "test", 5, {"total", "total2"}};
+TEST_CASE_METHOD(TApp, "TupleComplex", "[app]")
+{
+    std::tuple<double, std::string, int, std::pair<std::string, std::string>> pr {57.5, "test", 5, {"total", "total2"}};
     auto *opt = app.add_option("-i", pr)->expected(0, 4);
     args = {"-i"};
     run();
     CHECK(app.count("-i") == 1u);
 
-    std::tuple<double, std::string, int, std::pair<std::string, std::string>> pr2{
+    std::tuple<double, std::string, int, std::pair<std::string, std::string>> pr2 {
         99.5, "test2", 87, {"total3", "total4"}};
     opt->default_val(pr2);
     run();
     CHECK(pr == pr2);
 }
 
-TEST_CASE_METHOD(TApp, "invalidDefault", "[app]") {
-    int pr{5};
+TEST_CASE_METHOD(TApp, "invalidDefault", "[app]")
+{
+    int pr {5};
     auto *opt = app.add_option("-i", pr)
                     ->expected(1)
                     ->multi_option_policy(CLI::MultiOptionPolicy::Throw)
@@ -547,8 +592,9 @@ TEST_CASE_METHOD(TApp, "invalidDefault", "[app]") {
     CHECK_THROWS(opt->default_val("4,6,2,8"));
 }
 
-TEST_CASE_METHOD(TApp, "TogetherInt", "[app]") {
-    int i{0};
+TEST_CASE_METHOD(TApp, "TogetherInt", "[app]")
+{
+    int i {0};
     app.add_option("-i,--int", i);
     args = {"-i4"};
     run();
@@ -559,8 +605,9 @@ TEST_CASE_METHOD(TApp, "TogetherInt", "[app]") {
     CHECK(4.0 == app["--int"]->as<double>());
 }
 
-TEST_CASE_METHOD(TApp, "SepInt", "[app]") {
-    int i{0};
+TEST_CASE_METHOD(TApp, "SepInt", "[app]")
+{
+    int i {0};
     app.add_option("-i,--int", i);
     args = {"-i", "4"};
     run();
@@ -569,7 +616,8 @@ TEST_CASE_METHOD(TApp, "SepInt", "[app]") {
     CHECK(4 == i);
 }
 
-TEST_CASE_METHOD(TApp, "DefaultStringAgain", "[app]") {
+TEST_CASE_METHOD(TApp, "DefaultStringAgain", "[app]")
+{
     std::string str = "previous";
     app.add_option("-s,--string", str);
     run();
@@ -578,7 +626,8 @@ TEST_CASE_METHOD(TApp, "DefaultStringAgain", "[app]") {
     CHECK("previous" == str);
 }
 
-TEST_CASE_METHOD(TApp, "DefaultStringAgainEmpty", "[app]") {
+TEST_CASE_METHOD(TApp, "DefaultStringAgainEmpty", "[app]")
+{
     std::string str = "previous";
     app.add_option("-s,--string", str);
     app.parse("   ");
@@ -587,7 +636,8 @@ TEST_CASE_METHOD(TApp, "DefaultStringAgainEmpty", "[app]") {
     CHECK("previous" == str);
 }
 
-TEST_CASE_METHOD(TApp, "DualOptions", "[app]") {
+TEST_CASE_METHOD(TApp, "DualOptions", "[app]")
+{
 
     std::string str = "previous";
     std::vector<std::string> vstr = {"previous"};
@@ -603,7 +653,8 @@ TEST_CASE_METHOD(TApp, "DualOptions", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "LotsOfFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "LotsOfFlags", "[app]")
+{
 
     app.add_flag("-a");
     app.add_flag("-A");
@@ -617,9 +668,10 @@ TEST_CASE_METHOD(TApp, "LotsOfFlags", "[app]") {
     CHECK(4u == app.count_all());
 }
 
-TEST_CASE_METHOD(TApp, "NumberFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "NumberFlags", "[app]")
+{
 
-    int val{0};
+    int val {0};
     app.add_flag("-1{1},-2{2},-3{3},-4{4},-5{5},-6{6}, -7{7}, -8{8}, -9{9}", val);
 
     args = {"-7"};
@@ -628,9 +680,10 @@ TEST_CASE_METHOD(TApp, "NumberFlags", "[app]") {
     CHECK(7 == val);
 }
 
-TEST_CASE_METHOD(TApp, "doubleDashH", "[app]") {
+TEST_CASE_METHOD(TApp, "doubleDashH", "[app]")
+{
 
-    int val{0};
+    int val {0};
     // test you can add a --h option and it doesn't conflict with the help
     CHECK_NOTHROW(app.add_flag("--h", val));
 
@@ -640,9 +693,10 @@ TEST_CASE_METHOD(TApp, "doubleDashH", "[app]") {
     CHECK_NOTHROW(app.add_flag("--t"));
 }
 
-TEST_CASE_METHOD(TApp, "DisableFlagOverrideTest", "[app]") {
+TEST_CASE_METHOD(TApp, "DisableFlagOverrideTest", "[app]")
+{
 
-    int val{0};
+    int val {0};
     auto *opt = app.add_flag("--1{1},--2{2},--3{3},--4{4},--5{5},--6{6}, --7{7}, --8{8}, --9{9}", val);
     CHECK(!opt->get_disable_flag_override());
     opt->disable_flag_override();
@@ -658,7 +712,8 @@ TEST_CASE_METHOD(TApp, "DisableFlagOverrideTest", "[app]") {
     CHECK_NOTHROW(run());
 }
 
-TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleString", "[app]") {
+TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleString", "[app]")
+{
 
     app.add_flag("-a");
     app.add_flag("-A");
@@ -670,7 +725,8 @@ TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleString", "[app]") {
     CHECK(app.count("-A") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleStringExtraSpace", "[app]") {
+TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleStringExtraSpace", "[app]")
+{
 
     app.add_flag("-a");
     app.add_flag("-A");
@@ -682,7 +738,8 @@ TEST_CASE_METHOD(TApp, "LotsOfFlagsSingleStringExtraSpace", "[app]") {
     CHECK(app.count("-A") == 1u);
 }
 
-TEST_CASE_METHOD(TApp, "SingleArgVector", "[app]") {
+TEST_CASE_METHOD(TApp, "SingleArgVector", "[app]")
+{
 
     std::vector<std::string> channels;
     std::vector<std::string> iargs;
@@ -702,7 +759,8 @@ TEST_CASE_METHOD(TApp, "SingleArgVector", "[app]") {
     CHECK("happy" == path);
 }
 
-TEST_CASE_METHOD(TApp, "StrangeOptionNames", "[app]") {
+TEST_CASE_METHOD(TApp, "StrangeOptionNames", "[app]")
+{
     app.add_option("-:");
     app.add_option("--t\tt");
     app.add_option("--{}");
@@ -716,46 +774,63 @@ TEST_CASE_METHOD(TApp, "StrangeOptionNames", "[app]") {
     CHECK(app["--{}"]->as<int>() == 5);
 }
 
-TEST_CASE_METHOD(TApp, "singledash", "[app]") {
+TEST_CASE_METHOD(TApp, "singledash", "[app]")
+{
     app.add_option("-t");
-    try {
+    try
+    {
         app.add_option("-test");
-    } catch(const CLI::BadNameString &e) {
+    }
+    catch (const CLI::BadNameString &e)
+    {
         std::string str = e.what();
         CHECK_THAT(str, Contains("2 dashes"));
         CHECK_THAT(str, Contains("-test"));
-    } catch(...) {
+    }
+    catch (...)
+    {
         CHECK(false);
     }
-    try {
+    try
+    {
         app.add_option("-!");
-    } catch(const CLI::BadNameString &e) {
+    }
+    catch (const CLI::BadNameString &e)
+    {
         std::string str = e.what();
         CHECK_THAT(str, Contains("one char"));
         CHECK_THAT(str, Contains("-!"));
-    } catch(...) {
+    }
+    catch (...)
+    {
         CHECK(false);
     }
     app.allow_non_standard_option_names();
-    try {
+    try
+    {
         app.add_option("-!I{am}bad");
-    } catch(const CLI::BadNameString &e) {
+    }
+    catch (const CLI::BadNameString &e)
+    {
         std::string str = e.what();
         CHECK_THAT(str, Contains("!I{am}bad"));
-    } catch(...) {
+    }
+    catch (...)
+    {
         CHECK(false);
     }
 }
 
-TEST_CASE_METHOD(TApp, "FlagLikeOption", "[app]") {
-    bool val{false};
+TEST_CASE_METHOD(TApp, "FlagLikeOption", "[app]")
+{
+    bool val {false};
     auto *opt = app.add_option("--flag", val)->type_size(0)->default_str("true");
     args = {"--flag"};
     run();
     CHECK(app.count("--flag") == 1u);
     CHECK(val);
     val = false;
-    opt->type_size(0, 0);  // should be the same as above
+    opt->type_size(0, 0); // should be the same as above
     CHECK(0 == opt->get_type_size_min());
     CHECK(0 == opt->get_type_size_max());
     run();
@@ -763,8 +838,9 @@ TEST_CASE_METHOD(TApp, "FlagLikeOption", "[app]") {
     CHECK(val);
 }
 
-TEST_CASE_METHOD(TApp, "FlagLikeIntOption", "[app]") {
-    int val{-47};
+TEST_CASE_METHOD(TApp, "FlagLikeIntOption", "[app]")
+{
+    int val {-47};
     auto *opt = app.add_option("--flag", val)->expected(0, 1);
     // normally some default value should be set, but this test is for some paths in the validators checks to skip
     // validation on empty string if nothing is expected
@@ -783,8 +859,9 @@ TEST_CASE_METHOD(TApp, "FlagLikeIntOption", "[app]") {
     CHECK(opt->as<std::string>().empty());
 }
 
-TEST_CASE_METHOD(TApp, "BoolOnlyFlag", "[app]") {
-    bool bflag{false};
+TEST_CASE_METHOD(TApp, "BoolOnlyFlag", "[app]")
+{
+    bool bflag {false};
     app.add_flag("-b", bflag)->multi_option_policy(CLI::MultiOptionPolicy::Throw);
 
     args = {"-b"};
@@ -795,9 +872,10 @@ TEST_CASE_METHOD(TApp, "BoolOnlyFlag", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "ShortOpts", "[app]") {
+TEST_CASE_METHOD(TApp, "ShortOpts", "[app]")
+{
 
-    std::uint64_t funnyint{0};
+    std::uint64_t funnyint {0};
     std::string someopt;
     app.add_flag("-z", funnyint);
     app.add_option("-y", someopt);
@@ -810,14 +888,15 @@ TEST_CASE_METHOD(TApp, "ShortOpts", "[app]") {
 
     CHECK(app.count("-z") == 2u);
     CHECK(app.count("-y") == 1u);
-    CHECK(funnyint == std::uint64_t{2});
+    CHECK(funnyint == std::uint64_t {2});
     CHECK(someopt == "zyz");
     CHECK(3u == app.count_all());
 }
 
-TEST_CASE_METHOD(TApp, "TwoParamTemplateOpts", "[app]") {
+TEST_CASE_METHOD(TApp, "TwoParamTemplateOpts", "[app]")
+{
 
-    double funnyint{0.0};
+    double funnyint {0.0};
     auto *opt = app.add_option<double, unsigned int>("-y", funnyint);
 
     args = {"-y", "32"};
@@ -836,13 +915,14 @@ TEST_CASE_METHOD(TApp, "TwoParamTemplateOpts", "[app]") {
     CHECK(opt->get_default_str().empty());
 }
 
-TEST_CASE_METHOD(TApp, "DefaultOpts", "[app]") {
+TEST_CASE_METHOD(TApp, "DefaultOpts", "[app]")
+{
 
-    int i{3};
+    int i {3};
     std::string s = "HI";
 
     app.add_option("-i,i", i);
-    app.add_option("-s,s", s)->capture_default_str();  //  Used to be different
+    app.add_option("-s,s", s)->capture_default_str(); //  Used to be different
 
     args = {"-i2", "9"};
 
@@ -854,7 +934,8 @@ TEST_CASE_METHOD(TApp, "DefaultOpts", "[app]") {
     CHECK(s == "9");
 }
 
-TEST_CASE_METHOD(TApp, "TakeLastOpt", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeLastOpt", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
@@ -866,7 +947,8 @@ TEST_CASE_METHOD(TApp, "TakeLastOpt", "[app]") {
     CHECK("two" == str);
 }
 
-TEST_CASE_METHOD(TApp, "TakeLastOpt2", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeLastOpt2", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->take_last();
@@ -878,7 +960,8 @@ TEST_CASE_METHOD(TApp, "TakeLastOpt2", "[app]") {
     CHECK("two" == str);
 }
 
-TEST_CASE_METHOD(TApp, "TakeFirstOpt", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeFirstOpt", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->multi_option_policy(CLI::MultiOptionPolicy::TakeFirst);
@@ -890,7 +973,8 @@ TEST_CASE_METHOD(TApp, "TakeFirstOpt", "[app]") {
     CHECK("one" == str);
 }
 
-TEST_CASE_METHOD(TApp, "TakeFirstOpt2", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeFirstOpt2", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->take_first();
@@ -902,7 +986,8 @@ TEST_CASE_METHOD(TApp, "TakeFirstOpt2", "[app]") {
     CHECK("one" == str);
 }
 
-TEST_CASE_METHOD(TApp, "JoinOpt", "[app]") {
+TEST_CASE_METHOD(TApp, "JoinOpt", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->multi_option_policy(CLI::MultiOptionPolicy::Join);
@@ -914,7 +999,8 @@ TEST_CASE_METHOD(TApp, "JoinOpt", "[app]") {
     CHECK("one\ntwo" == str);
 }
 
-TEST_CASE_METHOD(TApp, "SumOpt", "[app]") {
+TEST_CASE_METHOD(TApp, "SumOpt", "[app]")
+{
 
     int val = 0;
     app.add_option("--val", val)->multi_option_policy(CLI::MultiOptionPolicy::Sum);
@@ -926,7 +1012,8 @@ TEST_CASE_METHOD(TApp, "SumOpt", "[app]") {
     CHECK(5 == val);
 }
 
-TEST_CASE_METHOD(TApp, "SumOptFloat", "[app]") {
+TEST_CASE_METHOD(TApp, "SumOptFloat", "[app]")
+{
 
     double val = NAN;
     app.add_option("--val", val)->multi_option_policy(CLI::MultiOptionPolicy::Sum);
@@ -938,7 +1025,8 @@ TEST_CASE_METHOD(TApp, "SumOptFloat", "[app]") {
     CHECK(std::fabs(0.6 - val) <= std::numeric_limits<double>::epsilon());
 }
 
-TEST_CASE_METHOD(TApp, "SumOptString", "[app]") {
+TEST_CASE_METHOD(TApp, "SumOptString", "[app]")
+{
 
     std::string val;
     app.add_option("--val", val)->multi_option_policy(CLI::MultiOptionPolicy::Sum);
@@ -950,7 +1038,8 @@ TEST_CASE_METHOD(TApp, "SumOptString", "[app]") {
     CHECK("i2" == val);
 }
 
-TEST_CASE_METHOD(TApp, "ReverseOpt", "[app]") {
+TEST_CASE_METHOD(TApp, "ReverseOpt", "[app]")
+{
 
     std::vector<std::string> val;
     auto *opt1 = app.add_option("--val", val)->multi_option_policy(CLI::MultiOptionPolicy::Reverse);
@@ -973,7 +1062,8 @@ TEST_CASE_METHOD(TApp, "ReverseOpt", "[app]") {
     CHECK(opt1->get_multi_option_policy() == CLI::MultiOptionPolicy::Reverse);
 }
 
-TEST_CASE_METHOD(TApp, "JoinOpt2", "[app]") {
+TEST_CASE_METHOD(TApp, "JoinOpt2", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->join();
@@ -985,7 +1075,8 @@ TEST_CASE_METHOD(TApp, "JoinOpt2", "[app]") {
     CHECK("one\ntwo" == str);
 }
 
-TEST_CASE_METHOD(TApp, "TakeLastOptMulti", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeLastOptMulti", "[app]")
+{
     std::vector<int> vals;
     app.add_option("--long", vals)->expected(2)->take_last();
 
@@ -996,7 +1087,8 @@ TEST_CASE_METHOD(TApp, "TakeLastOptMulti", "[app]") {
     CHECK(std::vector<int>({2, 3}) == vals);
 }
 
-TEST_CASE_METHOD(TApp, "TakeLastOptMulti_alternative_path", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeLastOptMulti_alternative_path", "[app]")
+{
     std::vector<int> vals;
     app.add_option("--long", vals)->expected(2, -1)->take_last();
 
@@ -1007,7 +1099,8 @@ TEST_CASE_METHOD(TApp, "TakeLastOptMulti_alternative_path", "[app]") {
     CHECK(std::vector<int>({2, 3}) == vals);
 }
 
-TEST_CASE_METHOD(TApp, "TakeLastOptMultiCheck", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeLastOptMultiCheck", "[app]")
+{
     std::vector<int> vals;
     auto *opt = app.add_option("--long", vals)->expected(-2)->take_last();
 
@@ -1020,7 +1113,8 @@ TEST_CASE_METHOD(TApp, "TakeLastOptMultiCheck", "[app]") {
     CHECK(std::vector<int>({2, -3}) == vals);
 }
 
-TEST_CASE_METHOD(TApp, "TakeFirstOptMulti", "[app]") {
+TEST_CASE_METHOD(TApp, "TakeFirstOptMulti", "[app]")
+{
     std::vector<int> vals;
     app.add_option("--long", vals)->expected(2)->take_first();
 
@@ -1031,7 +1125,8 @@ TEST_CASE_METHOD(TApp, "TakeFirstOptMulti", "[app]") {
     CHECK(std::vector<int>({1, 2}) == vals);
 }
 
-TEST_CASE_METHOD(TApp, "optionPriority", "[app]") {
+TEST_CASE_METHOD(TApp, "optionPriority", "[app]")
+{
     std::vector<int> results;
     auto *opt1 = app.add_flag_callback("-A", [&]() { results.push_back(1); });
     auto *opt2 = app.add_flag_callback("-B", [&]() { results.push_back(2); });
@@ -1076,7 +1171,8 @@ TEST_CASE_METHOD(TApp, "optionPriority", "[app]") {
     CHECK(std::vector<int>({2, 5}) == results);
 }
 
-TEST_CASE_METHOD(TApp, "ComplexOptMulti", "[app]") {
+TEST_CASE_METHOD(TApp, "ComplexOptMulti", "[app]")
+{
     std::complex<double> val;
     app.add_option("--long", val)->take_first()->allow_extra_args();
 
@@ -1088,8 +1184,9 @@ TEST_CASE_METHOD(TApp, "ComplexOptMulti", "[app]") {
     CHECK(2 == Approx(val.imag()));
 }
 
-TEST_CASE_METHOD(TApp, "MissingValueNonRequiredOpt", "[app]") {
-    int count{0};
+TEST_CASE_METHOD(TApp, "MissingValueNonRequiredOpt", "[app]")
+{
+    int count {0};
     app.add_option("-c,--count", count);
 
     args = {"-c"};
@@ -1099,7 +1196,8 @@ TEST_CASE_METHOD(TApp, "MissingValueNonRequiredOpt", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "MissingValueMoreThan", "[app]") {
+TEST_CASE_METHOD(TApp, "MissingValueMoreThan", "[app]")
+{
     std::vector<int> vals1;
     std::vector<int> vals2;
     app.add_option("-v", vals1)->expected(-2);
@@ -1112,7 +1210,8 @@ TEST_CASE_METHOD(TApp, "MissingValueMoreThan", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "NoMissingValueMoreThan", "[app]") {
+TEST_CASE_METHOD(TApp, "NoMissingValueMoreThan", "[app]")
+{
     std::vector<int> vals1;
     std::vector<int> vals2;
     app.add_option("-v", vals1)->expected(-2);
@@ -1127,7 +1226,8 @@ TEST_CASE_METHOD(TApp, "NoMissingValueMoreThan", "[app]") {
     CHECK(std::vector<int>({2, 3, 4}) == vals2);
 }
 
-TEST_CASE_METHOD(TApp, "NotRequiredOptsSingle", "[app]") {
+TEST_CASE_METHOD(TApp, "NotRequiredOptsSingle", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str);
@@ -1137,7 +1237,8 @@ TEST_CASE_METHOD(TApp, "NotRequiredOptsSingle", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "NotRequiredOptsSingleShort", "[app]") {
+TEST_CASE_METHOD(TApp, "NotRequiredOptsSingleShort", "[app]")
+{
 
     std::string str;
     app.add_option("-s", str);
@@ -1147,7 +1248,8 @@ TEST_CASE_METHOD(TApp, "NotRequiredOptsSingleShort", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsSingle", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsSingle", "[app]")
+{
 
     std::string str;
     app.add_option("--str", str)->required();
@@ -1157,7 +1259,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsSingle", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsSingleShort", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsSingleShort", "[app]")
+{
 
     std::string str;
     app.add_option("-s", str)->required();
@@ -1167,7 +1270,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsSingleShort", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsDouble", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsDouble", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("--str", strs)->required()->expected(2);
@@ -1183,7 +1287,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsDouble", "[app]") {
     CHECK(std::vector<std::string>({"one", "two"}) == strs);
 }
 
-TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]") {
+TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]")
+{
 
     std::vector<std::string> strs;
     std::vector<std::string> strs2;
@@ -1206,7 +1311,7 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]") {
     run();
 
     CHECK(strs.empty());
-    CHECK(std::vector<std::string>{"{}"} == strs2);
+    CHECK(std::vector<std::string> {"{}"} == strs2);
     opt1->default_str("{}");
     args = {"--str"};
 
@@ -1219,7 +1324,8 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]") {
     CHECK_FALSE(strs3.empty());
 }
 
-TEST_CASE_METHOD(TApp, "emptyVectorReturnReduce", "[app]") {
+TEST_CASE_METHOD(TApp, "emptyVectorReturnReduce", "[app]")
+{
 
     std::vector<std::string> strs;
     std::vector<std::string> strs2;
@@ -1242,7 +1348,7 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturnReduce", "[app]") {
     run();
 
     CHECK(strs.empty());
-    CHECK(std::vector<std::string>{"{}"} == strs2);
+    CHECK(std::vector<std::string> {"{}"} == strs2);
     opt1->default_str("{}");
     args = {"--str"};
 
@@ -1255,7 +1361,8 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturnReduce", "[app]") {
     CHECK_FALSE(strs3.empty());
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsDoubleShort", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsDoubleShort", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("-s", strs)->required()->expected(2);
@@ -1269,7 +1376,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsDoubleShort", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsDoubleNeg", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsDoubleNeg", "[app]")
+{
     std::vector<std::string> strs;
     app.add_option("-s", strs)->required()->expected(-2);
 
@@ -1287,7 +1395,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsDoubleNeg", "[app]") {
     CHECK(std::vector<std::string>({"one", "two"}) == strs);
 }
 
-TEST_CASE_METHOD(TApp, "ExpectedRangeParam", "[app]") {
+TEST_CASE_METHOD(TApp, "ExpectedRangeParam", "[app]")
+{
 
     app.add_option("-s")->required()->expected(2, 4);
 
@@ -1313,10 +1422,13 @@ TEST_CASE_METHOD(TApp, "ExpectedRangeParam", "[app]") {
 
     args = {"-s", "one", "two", "three", "four", "five", "six", "seven"};
 
-    try {
+    try
+    {
         run();
         CHECK(false);
-    } catch(const CLI::ExtrasError &err) {
+    }
+    catch (const CLI::ExtrasError &err)
+    {
         std::string message = err.what();
         auto fiveloc = message.find("five");
         auto sixloc = message.find("six");
@@ -1327,7 +1439,8 @@ TEST_CASE_METHOD(TApp, "ExpectedRangeParam", "[app]") {
     }
 }
 
-TEST_CASE_METHOD(TApp, "ExpectedRangePositional", "[app]") {
+TEST_CASE_METHOD(TApp, "ExpectedRangePositional", "[app]")
+{
 
     app.add_option("arg")->required()->expected(2, 4);
 
@@ -1354,7 +1467,8 @@ TEST_CASE_METHOD(TApp, "ExpectedRangePositional", "[app]") {
 
 // This makes sure unlimited option priority is
 // correct for space vs. no space #90
-TEST_CASE_METHOD(TApp, "PositionalNoSpace", "[app]") {
+TEST_CASE_METHOD(TApp, "PositionalNoSpace", "[app]")
+{
     std::vector<std::string> options;
     std::string foo, bar;
 
@@ -1376,7 +1490,8 @@ TEST_CASE_METHOD(TApp, "PositionalNoSpace", "[app]") {
 }
 
 // Tests positionals at end
-TEST_CASE_METHOD(TApp, "PositionalAtEnd", "[app]") {
+TEST_CASE_METHOD(TApp, "PositionalAtEnd", "[app]")
+{
     std::string options;
     std::string foo;
 
@@ -1391,10 +1506,13 @@ TEST_CASE_METHOD(TApp, "PositionalAtEnd", "[app]") {
     CHECK("param1" == foo);
 
     args = {"param2", "-O", "Test"};
-    try {
+    try
+    {
         run();
         CHECK(false);
-    } catch(const CLI::ExtrasError &err) {
+    }
+    catch (const CLI::ExtrasError &err)
+    {
         std::string message = err.what();
         auto oloc = message.find("-O");
         auto tloc = message.find("Test");
@@ -1403,7 +1521,8 @@ TEST_CASE_METHOD(TApp, "PositionalAtEnd", "[app]") {
 }
 
 // Tests positionals at end
-TEST_CASE_METHOD(TApp, "PositionalInjectSeparator", "[app]") {
+TEST_CASE_METHOD(TApp, "PositionalInjectSeparator", "[app]")
+{
     std::string options;
     std::vector<std::vector<std::string>> foo;
 
@@ -1418,7 +1537,8 @@ TEST_CASE_METHOD(TApp, "PositionalInjectSeparator", "[app]") {
 }
 
 // Tests positionals at end
-TEST_CASE_METHOD(TApp, "RequiredPositionals", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredPositionals", "[app]")
+{
     std::vector<std::string> sources;
     std::string dest;
     app.add_option("src", sources);
@@ -1439,7 +1559,8 @@ TEST_CASE_METHOD(TApp, "RequiredPositionals", "[app]") {
     CHECK("a" == dest);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredPositionalVector", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredPositionalVector", "[app]")
+{
     std::string d1;
     std::string d2;
     std::string d3;
@@ -1467,9 +1588,10 @@ TEST_CASE_METHOD(TApp, "RequiredPositionalVector", "[app]") {
 }
 
 // Tests positionals at end
-TEST_CASE_METHOD(TApp, "RequiredPositionalValidation", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredPositionalValidation", "[app]")
+{
     std::vector<std::string> sources;
-    int dest = 0;  // required
+    int dest = 0; // required
     std::string d2;
     app.add_option("src", sources);
     app.add_option("dest", dest)->required()->check(CLI::PositiveNumber);
@@ -1484,7 +1606,8 @@ TEST_CASE_METHOD(TApp, "RequiredPositionalValidation", "[app]") {
     CHECK("string" == d2);
 }
 
-TEST_CASE_METHOD(TApp, "PositionalNoSpaceLong", "[app]") {
+TEST_CASE_METHOD(TApp, "PositionalNoSpaceLong", "[app]")
+{
     std::vector<std::string> options;
     std::string foo, bar;
 
@@ -1505,7 +1628,8 @@ TEST_CASE_METHOD(TApp, "PositionalNoSpaceLong", "[app]") {
     CHECK("Test" == options.at(0));
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsUnlimited", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsUnlimited", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("--str", strs)->required();
@@ -1553,7 +1677,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsUnlimited", "[app]") {
     CHECK(std::vector<std::string>({"two"}) == remain);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredOptsUnlimitedShort", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredOptsUnlimitedShort", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("-s", strs)->required();
@@ -1595,7 +1720,8 @@ TEST_CASE_METHOD(TApp, "RequiredOptsUnlimitedShort", "[app]") {
     CHECK(std::vector<std::string>({"one"}) == remain);
 }
 
-TEST_CASE_METHOD(TApp, "OptsUnlimitedEnd", "[app]") {
+TEST_CASE_METHOD(TApp, "OptsUnlimitedEnd", "[app]")
+{
     std::vector<std::string> strs;
     app.add_option("-s,--str", strs);
     app.allow_extras();
@@ -1608,7 +1734,8 @@ TEST_CASE_METHOD(TApp, "OptsUnlimitedEnd", "[app]") {
     CHECK(std::vector<std::string>({"one", "four"}) == app.remaining());
 }
 
-TEST_CASE_METHOD(TApp, "RequireOptPriority", "[app]") {
+TEST_CASE_METHOD(TApp, "RequireOptPriority", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("--str", strs);
@@ -1628,7 +1755,8 @@ TEST_CASE_METHOD(TApp, "RequireOptPriority", "[app]") {
     CHECK(std::vector<std::string>({"two", "three"}) == remain);
 }
 
-TEST_CASE_METHOD(TApp, "RequireOptPriorityShort", "[app]") {
+TEST_CASE_METHOD(TApp, "RequireOptPriorityShort", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("-s", strs)->required();
@@ -1648,7 +1776,8 @@ TEST_CASE_METHOD(TApp, "RequireOptPriorityShort", "[app]") {
     CHECK(std::vector<std::string>({"two", "three"}) == remain);
 }
 
-TEST_CASE_METHOD(TApp, "NotRequiredExpectedDouble", "[app]") {
+TEST_CASE_METHOD(TApp, "NotRequiredExpectedDouble", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("--str", strs)->expected(2);
@@ -1658,7 +1787,8 @@ TEST_CASE_METHOD(TApp, "NotRequiredExpectedDouble", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "NotRequiredExpectedDoubleShort", "[app]") {
+TEST_CASE_METHOD(TApp, "NotRequiredExpectedDoubleShort", "[app]")
+{
 
     std::vector<std::string> strs;
     app.add_option("-s", strs)->expected(2);
@@ -1668,9 +1798,10 @@ TEST_CASE_METHOD(TApp, "NotRequiredExpectedDoubleShort", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
 }
 
-TEST_CASE_METHOD(TApp, "RequiredFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "RequiredFlags", "[app]")
+{
     app.add_flag("-a")->required();
-    app.add_flag("-b")->mandatory();  // Alternate term
+    app.add_flag("-b")->mandatory(); // Alternate term
 
     CHECK_THROWS_AS(run(), CLI::RequiredError);
 
@@ -1684,9 +1815,10 @@ TEST_CASE_METHOD(TApp, "RequiredFlags", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "CallbackFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "CallbackFlags", "[app]")
+{
 
-    std::int64_t value{0};
+    std::int64_t value {0};
 
     auto func = [&value](std::int64_t x) { value = x; };
 
@@ -1706,7 +1838,8 @@ TEST_CASE_METHOD(TApp, "CallbackFlags", "[app]") {
     CHECK_THROWS_AS(app.add_flag_function("hi", func), CLI::IncorrectConstruction);
 }
 
-TEST_CASE_METHOD(TApp, "CallbackFlagsFalse", "[app]") {
+TEST_CASE_METHOD(TApp, "CallbackFlagsFalse", "[app]")
+{
     std::int64_t value = 0;
 
     auto func = [&value](std::int64_t x) { value = x; };
@@ -1735,7 +1868,8 @@ TEST_CASE_METHOD(TApp, "CallbackFlagsFalse", "[app]") {
     CHECK_THROWS_AS(app.add_flag_function("hi", func), CLI::IncorrectConstruction);
 }
 
-TEST_CASE_METHOD(TApp, "CallbackFlagsFalseShortcut", "[app]") {
+TEST_CASE_METHOD(TApp, "CallbackFlagsFalseShortcut", "[app]")
+{
     std::int64_t value = 0;
 
     auto func = [&value](std::int64_t x) { value = x; };
@@ -1765,9 +1899,10 @@ TEST_CASE_METHOD(TApp, "CallbackFlagsFalseShortcut", "[app]") {
 }
 
 #if __cplusplus >= 201402L || _MSC_VER >= 1900
-TEST_CASE_METHOD(TApp, "CallbackFlagsAuto", "[app]") {
+TEST_CASE_METHOD(TApp, "CallbackFlagsAuto", "[app]")
+{
 
-    std::int64_t value{0};
+    std::int64_t value {0};
 
     auto func = [&value](std::int64_t x) { value = x; };
 
@@ -1788,7 +1923,8 @@ TEST_CASE_METHOD(TApp, "CallbackFlagsAuto", "[app]") {
 }
 #endif
 
-TEST_CASE_METHOD(TApp, "Positionals", "[app]") {
+TEST_CASE_METHOD(TApp, "Positionals", "[app]")
+{
 
     std::string posit1;
     std::string posit2;
@@ -1805,7 +1941,8 @@ TEST_CASE_METHOD(TApp, "Positionals", "[app]") {
     CHECK(posit2 == "thing2");
 }
 
-TEST_CASE_METHOD(TApp, "ForcedPositional", "[app]") {
+TEST_CASE_METHOD(TApp, "ForcedPositional", "[app]")
+{
     std::vector<std::string> posit;
     auto *one = app.add_flag("--one");
     app.add_option("posit", posit);
@@ -1824,9 +1961,10 @@ TEST_CASE_METHOD(TApp, "ForcedPositional", "[app]") {
     CHECK(posit == answers2);
 }
 
-TEST_CASE_METHOD(TApp, "MixedPositionals", "[app]") {
+TEST_CASE_METHOD(TApp, "MixedPositionals", "[app]")
+{
 
-    int positional_int{0};
+    int positional_int {0};
     std::string positional_string;
     app.add_option("posit1,--posit1", positional_int, "");
     app.add_option("posit2,--posit2", positional_string, "");
@@ -1841,7 +1979,8 @@ TEST_CASE_METHOD(TApp, "MixedPositionals", "[app]") {
     CHECK(positional_string == "thing2");
 }
 
-TEST_CASE_METHOD(TApp, "BigPositional", "[app]") {
+TEST_CASE_METHOD(TApp, "BigPositional", "[app]")
+{
     std::vector<std::string> vec;
     app.add_option("pos", vec);
 
@@ -1858,7 +1997,8 @@ TEST_CASE_METHOD(TApp, "BigPositional", "[app]") {
 
 #if (defined(CLI11_ENABLE_EXTRA_VALIDATORS) && CLI11_ENABLE_EXTRA_VALIDATORS == 1) ||                                  \
     (!defined(CLI11_DISABLE_EXTRA_VALIDATORS) || CLI11_DISABLE_EXTRA_VALIDATORS == 0)
-TEST_CASE_METHOD(TApp, "VectorArgAndPositional", "[app]") {
+TEST_CASE_METHOD(TApp, "VectorArgAndPositional", "[app]")
+{
     std::vector<std::string> vec;
     std::vector<int> ivec;
     app.add_option("pos", vec);
@@ -1887,10 +2027,11 @@ TEST_CASE_METHOD(TApp, "VectorArgAndPositional", "[app]") {
 }
 #endif
 
-TEST_CASE_METHOD(TApp, "Reset", "[app]") {
+TEST_CASE_METHOD(TApp, "Reset", "[app]")
+{
 
     app.add_flag("--simple");
-    double doub{0.0};
+    double doub {0.0};
     app.add_option("-d,--double", doub);
 
     args = {"--simple", "--double", "1.2"};
@@ -1913,7 +2054,8 @@ TEST_CASE_METHOD(TApp, "Reset", "[app]") {
     CHECK(doub == Approx(1.2));
 }
 
-TEST_CASE_METHOD(TApp, "RemoveOption", "[app]") {
+TEST_CASE_METHOD(TApp, "RemoveOption", "[app]")
+{
     app.add_flag("--one");
     auto *opt = app.add_flag("--two");
 
@@ -1925,7 +2067,8 @@ TEST_CASE_METHOD(TApp, "RemoveOption", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ExtrasError);
 }
 
-TEST_CASE_METHOD(TApp, "RemoveNeedsLinks", "[app]") {
+TEST_CASE_METHOD(TApp, "RemoveNeedsLinks", "[app]")
+{
     auto *one = app.add_flag("--one");
     auto *two = app.add_flag("--two");
 
@@ -1939,7 +2082,8 @@ TEST_CASE_METHOD(TApp, "RemoveNeedsLinks", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "RemoveExcludesLinks", "[app]") {
+TEST_CASE_METHOD(TApp, "RemoveExcludesLinks", "[app]")
+{
     auto *one = app.add_flag("--one");
     auto *two = app.add_flag("--two");
 
@@ -1950,11 +2094,12 @@ TEST_CASE_METHOD(TApp, "RemoveExcludesLinks", "[app]") {
 
     args = {"--two"};
 
-    run();  // Mostly hoping it does not crash
+    run(); // Mostly hoping it does not crash
 }
 
-TEST_CASE_METHOD(TApp, "FileNotExists", "[app]") {
-    std::string myfile{"TestNonFileNotUsed.txt"};
+TEST_CASE_METHOD(TApp, "FileNotExists", "[app]")
+{
+    std::string myfile {"TestNonFileNotUsed.txt"};
     REQUIRE_NOTHROW(CLI::NonexistentPath(myfile));
 
     std::string filename;
@@ -1964,7 +2109,7 @@ TEST_CASE_METHOD(TApp, "FileNotExists", "[app]") {
     run();
     CHECK(filename == myfile);
 
-    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
+    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
     CHECK_THROWS_AS(run(), CLI::ValidationError);
     // deactivate the check, so it should run now
@@ -1975,15 +2120,16 @@ TEST_CASE_METHOD(TApp, "FileNotExists", "[app]") {
 }
 
 #if defined CLI11_HAS_FILESYSTEM && CLI11_HAS_FILESYSTEM > 0 && defined(_MSC_VER)
-TEST_CASE_METHOD(TApp, "filesystemWideName", "[app]") {
-    std::filesystem::path myfile{L"voil\u20ac.txt"};
+TEST_CASE_METHOD(TApp, "filesystemWideName", "[app]")
+{
+    std::filesystem::path myfile {L"voil\u20ac.txt"};
 
     std::filesystem::path fpath;
     app.add_option("--file", fpath)->check(CLI::ExistingFile, "existing file");
 
     CHECK_THROWS_AS(app.parse(L"--file voil\u20ac.txt"), CLI::ValidationError);
 
-    bool ok = static_cast<bool>(std::ofstream(myfile).put('a'));  // create file
+    bool ok = static_cast<bool>(std::ofstream(myfile).put('a')); // create file
     CHECK(ok);
 
     // deactivate the check, so it should run now
@@ -1998,8 +2144,9 @@ TEST_CASE_METHOD(TApp, "filesystemWideName", "[app]") {
 }
 #endif
 
-TEST_CASE_METHOD(TApp, "NotFileExists", "[app]") {
-    std::string myfile{"TestNonFileNotUsed.txt"};
+TEST_CASE_METHOD(TApp, "NotFileExists", "[app]")
+{
+    std::string myfile {"TestNonFileNotUsed.txt"};
     CHECK(!CLI::ExistingFile(myfile).empty());
 
     std::string filename = "Failed";
@@ -2008,7 +2155,7 @@ TEST_CASE_METHOD(TApp, "NotFileExists", "[app]") {
 
     CHECK_NOTHROW(run());
 
-    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
+    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
     CHECK_THROWS_AS(run(), CLI::ValidationError);
 
@@ -2016,8 +2163,9 @@ TEST_CASE_METHOD(TApp, "NotFileExists", "[app]") {
     CHECK(!CLI::ExistingFile(myfile).empty());
 }
 
-TEST_CASE_METHOD(TApp, "FileExists", "[app]") {
-    std::string myfile{"TestNonFileNotUsed.txt"};
+TEST_CASE_METHOD(TApp, "FileExists", "[app]")
+{
+    std::string myfile {"TestNonFileNotUsed.txt"};
     CHECK(!CLI::ExistingFile(myfile).empty());
 
     std::string filename = "Failed";
@@ -2026,7 +2174,7 @@ TEST_CASE_METHOD(TApp, "FileExists", "[app]") {
 
     CHECK_THROWS_AS(run(), CLI::ValidationError);
 
-    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
+    bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
     run();
     CHECK(filename == myfile);
@@ -2035,9 +2183,10 @@ TEST_CASE_METHOD(TApp, "FileExists", "[app]") {
     CHECK(!CLI::ExistingFile(myfile).empty());
 }
 
-TEST_CASE_METHOD(TApp, "DefaultedResult", "[app]") {
+TEST_CASE_METHOD(TApp, "DefaultedResult", "[app]")
+{
     std::string sval = "NA";
-    int ival{0};
+    int ival {0};
     auto *opts = app.add_option("--string", sval)->capture_default_str();
     auto *optv = app.add_option("--val", ival);
     args = {};
@@ -2053,7 +2202,8 @@ TEST_CASE_METHOD(TApp, "DefaultedResult", "[app]") {
     CHECK(442 == newIval);
 }
 
-TEST_CASE_METHOD(TApp, "OriginalOrder", "[app]") {
+TEST_CASE_METHOD(TApp, "OriginalOrder", "[app]")
+{
     std::vector<int> st1;
     CLI::Option *op1 = app.add_option("-a", st1);
     std::vector<int> st2;
@@ -2071,7 +2221,8 @@ TEST_CASE_METHOD(TApp, "OriginalOrder", "[app]") {
     CHECK(app.parse_order().empty());
 }
 
-TEST_CASE_METHOD(TApp, "NeedsFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "NeedsFlags", "[app]")
+{
     CLI::Option *opt = app.add_flag("-s,--string");
     app.add_flag("--both")->needs(opt);
 
@@ -2089,9 +2240,10 @@ TEST_CASE_METHOD(TApp, "NeedsFlags", "[app]") {
     CHECK_NOTHROW(opt->needs(opt));
 }
 
-TEST_CASE_METHOD(TApp, "needsOptionFunction", "[app]") {
-    std::string s1{"A"};
-    std::string s2{"B"};
+TEST_CASE_METHOD(TApp, "needsOptionFunction", "[app]")
+{
+    std::string s1 {"A"};
+    std::string s2 {"B"};
     app.add_flag("-s,--string");
     app.add_option_function<std::string>("file", [&](std::string const &str) { s1 = str; }, "input file");
     app.add_option_function<std::string>(
@@ -2102,7 +2254,8 @@ TEST_CASE_METHOD(TApp, "needsOptionFunction", "[app]") {
     CHECK(s2 == "B");
 }
 
-TEST_CASE_METHOD(TApp, "ExcludesFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "ExcludesFlags", "[app]")
+{
     CLI::Option *opt = app.add_flag("-s,--string");
     app.add_flag("--nostr")->excludes(opt);
 
@@ -2123,7 +2276,8 @@ TEST_CASE_METHOD(TApp, "ExcludesFlags", "[app]") {
     CHECK_THROWS_AS(opt->excludes(opt), CLI::IncorrectConstruction);
 }
 
-TEST_CASE_METHOD(TApp, "ExcludesMixedFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "ExcludesMixedFlags", "[app]")
+{
     CLI::Option *opt1 = app.add_flag("--opt1");
     app.add_flag("--opt2");
     CLI::Option *opt3 = app.add_flag("--opt3");
@@ -2144,11 +2298,12 @@ TEST_CASE_METHOD(TApp, "ExcludesMixedFlags", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ExcludesError);
 }
 
-TEST_CASE_METHOD(TApp, "NeedsMultiFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "NeedsMultiFlags", "[app]")
+{
     CLI::Option *opt1 = app.add_flag("--opt1");
     CLI::Option *opt2 = app.add_flag("--opt2");
     CLI::Option *opt3 = app.add_flag("--opt3");
-    app.add_flag("--optall")->needs(opt1, opt2, opt3);  // NOLINT(readability-suspicious-call-argument)
+    app.add_flag("--optall")->needs(opt1, opt2, opt3); // NOLINT(readability-suspicious-call-argument)
 
     run();
 
@@ -2171,7 +2326,8 @@ TEST_CASE_METHOD(TApp, "NeedsMultiFlags", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "NeedsMixedFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "NeedsMixedFlags", "[app]")
+{
     CLI::Option *opt1 = app.add_flag("--opt1");
     app.add_flag("--opt2");
     app.add_flag("--opt3");
@@ -2198,7 +2354,8 @@ TEST_CASE_METHOD(TApp, "NeedsMixedFlags", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "NeedsChainedFlags", "[app]") {
+TEST_CASE_METHOD(TApp, "NeedsChainedFlags", "[app]")
+{
     CLI::Option *opt1 = app.add_flag("--opt1");
     CLI::Option *opt2 = app.add_flag("--opt2")->needs(opt1);
     app.add_flag("--opt3")->needs(opt2);
@@ -2227,11 +2384,12 @@ TEST_CASE_METHOD(TApp, "NeedsChainedFlags", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "Env", "[app]") {
+TEST_CASE_METHOD(TApp, "Env", "[app]")
+{
 
     put_env("CLI11_TEST_ENV_TMP", "2");
 
-    int val{1};
+    int val {1};
     CLI::Option *vopt = app.add_option("--tmp", val)->envname("CLI11_TEST_ENV_TMP");
 
     run();
@@ -2247,11 +2405,12 @@ TEST_CASE_METHOD(TApp, "Env", "[app]") {
 }
 
 // curiously check if an environmental only option works
-TEST_CASE_METHOD(TApp, "EnvOnly", "[app]") {
+TEST_CASE_METHOD(TApp, "EnvOnly", "[app]")
+{
 
     put_env("CLI11_TEST_ENV_TMP", "2");
 
-    int val{1};
+    int val {1};
     CLI::Option *vopt = app.add_option("", val)->envname("CLI11_TEST_ENV_TMP");
 
     run();
@@ -2267,7 +2426,8 @@ TEST_CASE_METHOD(TApp, "EnvOnly", "[app]") {
 }
 
 // reported bug #1013 on github
-TEST_CASE_METHOD(TApp, "groupEnvRequired", "[app]") {
+TEST_CASE_METHOD(TApp, "groupEnvRequired", "[app]")
+{
     std::string str;
     auto *group1 = app.add_option_group("group1");
     put_env("CLI11_TEST_GROUP_REQUIRED", "string_abc");
@@ -2278,8 +2438,9 @@ TEST_CASE_METHOD(TApp, "groupEnvRequired", "[app]") {
     unset_env("CLI11_TEST_GROUP_REQUIRED");
 }
 
-TEST_CASE_METHOD(TApp, "RangeInt", "[app]") {
-    int x{0};
+TEST_CASE_METHOD(TApp, "RangeInt", "[app]")
+{
+    int x {0};
     app.add_option("--one", x)->check(CLI::Range(3, 6));
 
     args = {"--one=1"};
@@ -2298,9 +2459,10 @@ TEST_CASE_METHOD(TApp, "RangeInt", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "RangeDouble", "[app]") {
+TEST_CASE_METHOD(TApp, "RangeDouble", "[app]")
+{
 
-    double x{0.0};
+    double x {0.0};
     /// Note that this must be a double in Range, too
     app.add_option("--one", x)->check(CLI::Range(3.0, 6.0));
 
@@ -2320,9 +2482,10 @@ TEST_CASE_METHOD(TApp, "RangeDouble", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "RangeFloat", "[app]") {
+TEST_CASE_METHOD(TApp, "RangeFloat", "[app]")
+{
 
-    float x{0.0f};
+    float x {0.0f};
     /// Note that this must be a float in Range, too
     app.add_option("--one", x, "testing floats")->check(CLI::Range(3.0, 6.0));
 
@@ -2342,28 +2505,33 @@ TEST_CASE_METHOD(TApp, "RangeFloat", "[app]") {
     run();
 }
 
-TEST_CASE_METHOD(TApp, "NonNegative", "[app]") {
+TEST_CASE_METHOD(TApp, "NonNegative", "[app]")
+{
 
     std::string res;
     /// Note that this must be a double in Range, too
     app.add_option("--one", res)->check(CLI::NonNegativeNumber);
 
     args = {"--one=crazy"};
-    try {
+    try
+    {
         // this should throw
         run();
         CHECK(false);
-    } catch(const CLI::ValidationError &e) {
+    }
+    catch (const CLI::ValidationError &e)
+    {
         std::string emess = e.what();
         CHECK(emess.size() < 70U);
     }
 }
 
-TEST_CASE_METHOD(TApp, "NeedsTrue", "[app]") {
+TEST_CASE_METHOD(TApp, "NeedsTrue", "[app]")
+{
     std::string str;
     app.add_option("-s,--string", str);
     app.add_flag("--opt1")->check([&](const std::string &) {
-        return (str != "val_with_opt1") ? std::string("--opt1 requires --string val_with_opt1") : std::string{};
+        return (str != "val_with_opt1") ? std::string("--opt1 requires --string val_with_opt1") : std::string {};
     });
 
     run();
@@ -2380,16 +2548,17 @@ TEST_CASE_METHOD(TApp, "NeedsTrue", "[app]") {
     args = {"--string", "val_with_opt1", "--opt1"};
     run();
 
-    args = {"--opt1", "--string", "val_with_opt1"};  // order is not relevant
+    args = {"--opt1", "--string", "val_with_opt1"}; // order is not relevant
     run();
 }
 
 // Check to make sure programmatic access to left over is available
-TEST_CASE_METHOD(TApp, "AllowExtras", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtras", "[app]")
+{
 
     app.allow_extras();
 
-    bool val{true};
+    bool val {true};
     app.add_flag("-f", val);
 
     args = {"-x", "-f"};
@@ -2405,7 +2574,8 @@ TEST_CASE_METHOD(TApp, "AllowExtras", "[app]") {
     CHECK(app.remaining().empty());
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasOrder", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasOrder", "[app]")
+{
 
     app.allow_extras();
 
@@ -2419,7 +2589,8 @@ TEST_CASE_METHOD(TApp, "AllowExtrasOrder", "[app]") {
     CHECK(left_over == app.remaining_for_passthrough());
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasCascade", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasCascade", "[app]")
+{
 
     app.allow_extras();
     args = {"-x", "45", "-f", "27"};
@@ -2428,7 +2599,7 @@ TEST_CASE_METHOD(TApp, "AllowExtrasCascade", "[app]") {
 
     std::vector<std::string> left_over = app.remaining_for_passthrough();
 
-    CLI::App capp{"cascade_program"};
+    CLI::App capp {"cascade_program"};
     int v1 = 0;
     int v2 = 0;
     capp.add_option("-x", v1);
@@ -2439,7 +2610,8 @@ TEST_CASE_METHOD(TApp, "AllowExtrasCascade", "[app]") {
     CHECK(27 == v2);
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasAssumptions", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasAssumptions", "[app]")
+{
 
     app.allow_extras(CLI::ExtrasMode::AssumeSingleArgument);
 
@@ -2480,10 +2652,11 @@ TEST_CASE_METHOD(TApp, "AllowExtrasAssumptions", "[app]") {
     CHECK(app.remaining().size() == 3U);
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasImmediateError", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasImmediateError", "[app]")
+{
 
-    int v1{0};
-    int v2{0};
+    int v1 {0};
+    int v2 {0};
     app.add_option("-f", v1)->trigger_on_parse();
     app.add_option("-x", v2);
     args = {"-x", "15", "-f", "17", "-g", "19"};
@@ -2493,19 +2666,20 @@ TEST_CASE_METHOD(TApp, "AllowExtrasImmediateError", "[app]") {
     args = {"-x", "21", "-f", "23", "-g", "25"};
     app.allow_extras(CLI::ExtrasMode::ErrorImmediately);
     CHECK_THROWS_AS(run(), CLI::ExtrasError);
-    CHECK(v1 == 23);  // -f still triggers
+    CHECK(v1 == 23); // -f still triggers
     CHECK(v2 == 15);
     CHECK(app.remaining().empty());
     args = {"-x", "27", "-g", "29", "-f", "31"};
     CHECK_THROWS_AS(run(), CLI::ExtrasError);
-    CHECK(v1 == 23);  // -f did not trigger
+    CHECK(v1 == 23); // -f did not trigger
     CHECK(v2 == 15);
     CHECK(app.remaining().empty());
 }
 
-TEST_CASE_METHOD(TApp, "PrefixCommand", "[app]") {
-    int v1{0};
-    int v2{0};
+TEST_CASE_METHOD(TApp, "PrefixCommand", "[app]")
+{
+    int v1 {0};
+    int v2 {0};
     app.add_option("-f", v1);
     app.add_option("-x", v2);
     app.prefix_command();
@@ -2554,12 +2728,14 @@ TEST_CASE_METHOD(TApp, "PrefixCommand", "[app]") {
 }
 
 // makes sure the error throws on the rValue version of the parse
-TEST_CASE_METHOD(TApp, "ExtrasErrorRvalueParse", "[app]") {
+TEST_CASE_METHOD(TApp, "ExtrasErrorRvalueParse", "[app]")
+{
 
     CHECK_THROWS_AS(app.parse(std::vector<std::string>({"-x", "45", "-f", "27"})), CLI::ExtrasError);
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasCascadeDirect", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasCascadeDirect", "[app]")
+{
 
     app.allow_extras();
 
@@ -2567,9 +2743,9 @@ TEST_CASE_METHOD(TApp, "AllowExtrasCascadeDirect", "[app]") {
     REQUIRE_NOTHROW(run());
     CHECK(std::vector<std::string>({"-x", "45", "-f", "27"}) == app.remaining());
 
-    CLI::App capp{"cascade_program"};
-    int v1{0};
-    int v2{0};
+    CLI::App capp {"cascade_program"};
+    int v1 {0};
+    int v2 {0};
     capp.add_option("-x", v1);
     capp.add_option("-f", v2);
 
@@ -2578,17 +2754,18 @@ TEST_CASE_METHOD(TApp, "AllowExtrasCascadeDirect", "[app]") {
     CHECK(27 == v2);
 }
 
-TEST_CASE_METHOD(TApp, "AllowExtrasArgModify", "[app]") {
+TEST_CASE_METHOD(TApp, "AllowExtrasArgModify", "[app]")
+{
 
-    int v1{0};
-    int v2{0};
+    int v1 {0};
+    int v2 {0};
     app.allow_extras();
     app.add_option("-f", v2);
     args = {"27", "-f", "45", "-x"};
     app.parse(args);
     CHECK(std::vector<std::string>({"45", "-x"}) == args);
 
-    CLI::App capp{"cascade_program"};
+    CLI::App capp {"cascade_program"};
 
     capp.add_option("-x", v1);
 
@@ -2598,7 +2775,8 @@ TEST_CASE_METHOD(TApp, "AllowExtrasArgModify", "[app]") {
 }
 
 // Test horrible error
-TEST_CASE_METHOD(TApp, "CheckShortFail", "[app]") {
+TEST_CASE_METHOD(TApp, "CheckShortFail", "[app]")
+{
     args = {"--two"};
 
     CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::SHORT, false),
@@ -2606,7 +2784,8 @@ TEST_CASE_METHOD(TApp, "CheckShortFail", "[app]") {
 }
 
 // Test horrible error
-TEST_CASE_METHOD(TApp, "CheckLongFail", "[app]") {
+TEST_CASE_METHOD(TApp, "CheckLongFail", "[app]")
+{
     args = {"-t"};
 
     CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::LONG, false),
@@ -2614,7 +2793,8 @@ TEST_CASE_METHOD(TApp, "CheckLongFail", "[app]") {
 }
 
 // Test horrible error
-TEST_CASE_METHOD(TApp, "CheckWindowsFail", "[app]") {
+TEST_CASE_METHOD(TApp, "CheckWindowsFail", "[app]")
+{
     args = {"-t"};
 
     CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::WINDOWS_STYLE, false),
@@ -2622,7 +2802,8 @@ TEST_CASE_METHOD(TApp, "CheckWindowsFail", "[app]") {
 }
 
 // Test horrible error
-TEST_CASE_METHOD(TApp, "CheckOtherFail", "[app]") {
+TEST_CASE_METHOD(TApp, "CheckOtherFail", "[app]")
+{
     args = {"-t"};
 
     CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::NONE, false),
@@ -2630,13 +2811,15 @@ TEST_CASE_METHOD(TApp, "CheckOtherFail", "[app]") {
 }
 
 // Test horrible error
-TEST_CASE_METHOD(TApp, "CheckSubcomFail", "[app]") {
+TEST_CASE_METHOD(TApp, "CheckSubcomFail", "[app]")
+{
     args = {"subcom"};
 
     CHECK_THROWS_AS(CLI::detail::AppFriend::parse_subcommand(&app, args), CLI::HorribleError);
 }
 
-TEST_CASE_METHOD(TApp, "FallthroughParents", "[app]") {
+TEST_CASE_METHOD(TApp, "FallthroughParents", "[app]")
+{
     auto *sub = app.add_subcommand("test");
     CHECK(&app == CLI::detail::AppFriend::get_fallthrough_parent(sub));
 
@@ -2659,7 +2842,8 @@ TEST_CASE_METHOD(TApp, "FallthroughParents", "[app]") {
     CHECK(CLI::detail::AppFriend::get_fallthrough_parent(&app) == nullptr);
 }
 
-TEST_CASE_METHOD(TApp, "ConstFallthroughParents", "[app]") {
+TEST_CASE_METHOD(TApp, "ConstFallthroughParents", "[app]")
+{
     auto *sub = app.add_subcommand("test");
     CHECK(&app == CLI::detail::AppFriend::get_fallthrough_parent(const_cast<const CLI::App *>(sub)));
 
@@ -2682,8 +2866,9 @@ TEST_CASE_METHOD(TApp, "ConstFallthroughParents", "[app]") {
     CHECK(CLI::detail::AppFriend::get_fallthrough_parent(const_cast<const CLI::App *>(&app)) == nullptr);
 }
 
-TEST_CASE_METHOD(TApp, "OptionWithDefaults", "[app]") {
-    int someint{2};
+TEST_CASE_METHOD(TApp, "OptionWithDefaults", "[app]")
+{
+    int someint {2};
     app.add_option("-a", someint)->capture_default_str();
 
     args = {"-a1", "-a2"};
@@ -2692,7 +2877,8 @@ TEST_CASE_METHOD(TApp, "OptionWithDefaults", "[app]") {
 }
 
 // Added to test ->transform
-TEST_CASE_METHOD(TApp, "OrderedModifyingTransforms", "[app]") {
+TEST_CASE_METHOD(TApp, "OrderedModifyingTransforms", "[app]")
+{
     std::vector<std::string> val;
     auto *m = app.add_option("-m", val);
     m->transform([](std::string x) { return x + "1"; });
@@ -2706,7 +2892,8 @@ TEST_CASE_METHOD(TApp, "OrderedModifyingTransforms", "[app]") {
 }
 
 // non standard options
-TEST_CASE_METHOD(TApp, "nonStandardOptions", "[app]") {
+TEST_CASE_METHOD(TApp, "nonStandardOptions", "[app]")
+{
     std::string string1;
     CHECK_THROWS_AS(app.add_option("-single", string1), CLI::BadNameString);
     app.allow_non_standard_option_names();
@@ -2719,7 +2906,8 @@ TEST_CASE_METHOD(TApp, "nonStandardOptions", "[app]") {
     CHECK(string1 == "string1");
 }
 
-TEST_CASE_METHOD(TApp, "nonStandardOptions2", "[app]") {
+TEST_CASE_METHOD(TApp, "nonStandardOptions2", "[app]")
+{
     std::vector<std::string> strings;
     app.allow_non_standard_option_names();
     app.add_option("-single,--single,-m", strings);
@@ -2727,24 +2915,27 @@ TEST_CASE_METHOD(TApp, "nonStandardOptions2", "[app]") {
 
     run();
 
-    CHECK(strings == std::vector<std::string>{"string1", "string2"});
+    CHECK(strings == std::vector<std::string> {"string1", "string2"});
 }
 
-TEST_CASE_METHOD(TApp, "nonStandardOptionsIntersect", "[app]") {
+TEST_CASE_METHOD(TApp, "nonStandardOptionsIntersect", "[app]")
+{
     std::vector<std::string> strings;
     app.allow_non_standard_option_names();
     app.add_option("-s,-t");
     CHECK_THROWS_AS(app.add_option("-single,--single", strings), CLI::OptionAlreadyAdded);
 }
 
-TEST_CASE_METHOD(TApp, "nonStandardOptionsIntersect2", "[app]") {
+TEST_CASE_METHOD(TApp, "nonStandardOptionsIntersect2", "[app]")
+{
     std::vector<std::string> strings;
     app.allow_non_standard_option_names();
     app.add_option("-single,--single", strings);
     CHECK_THROWS_AS(app.add_option("-s,-t"), CLI::OptionAlreadyAdded);
 }
 
-TEST_CASE_METHOD(TApp, "ThrowingTransform", "[app]") {
+TEST_CASE_METHOD(TApp, "ThrowingTransform", "[app]")
+{
     std::string val;
     auto *m = app.add_option("-m,--mess", val);
     m->transform([](std::string) -> std::string { throw CLI::ValidationError("My Message"); });
@@ -2755,15 +2946,19 @@ TEST_CASE_METHOD(TApp, "ThrowingTransform", "[app]") {
 
     REQUIRE_THROWS_AS(run(), CLI::ValidationError);
 
-    try {
+    try
+    {
         run();
-    } catch(const CLI::ValidationError &e) {
+    }
+    catch (const CLI::ValidationError &e)
+    {
         CHECK(std::string("--mess: My Message") == e.what());
     }
 }
 
 // This was added to make running a simple function on each item easier
-TEST_CASE_METHOD(TApp, "EachItem", "[app]") {
+TEST_CASE_METHOD(TApp, "EachItem", "[app]")
+{
 
     std::vector<std::string> results;
     std::vector<std::string> dummy;
@@ -2780,7 +2975,8 @@ TEST_CASE_METHOD(TApp, "EachItem", "[app]") {
 }
 
 // #128
-TEST_CASE_METHOD(TApp, "RepeatingMultiArgumentOptions", "[app]") {
+TEST_CASE_METHOD(TApp, "RepeatingMultiArgumentOptions", "[app]")
+{
     std::vector<std::string> entries;
     app.add_option("--entry", entries, "set a key and value")->type_name("KEY VALUE")->type_size(-2);
 
@@ -2793,7 +2989,8 @@ TEST_CASE_METHOD(TApp, "RepeatingMultiArgumentOptions", "[app]") {
 }
 
 // #122
-TEST_CASE_METHOD(TApp, "EmptyOptionEach", "[app]") {
+TEST_CASE_METHOD(TApp, "EmptyOptionEach", "[app]")
+{
     std::string q;
     app.add_option("--each")->each([&q](std::string s) { q = s; });
 
@@ -2804,14 +3001,16 @@ TEST_CASE_METHOD(TApp, "EmptyOptionEach", "[app]") {
 }
 
 // #122
-TEST_CASE_METHOD(TApp, "EmptyOptionFail", "[app]") {
+TEST_CASE_METHOD(TApp, "EmptyOptionFail", "[app]")
+{
     app.add_option("--each");
 
     args = {"--each", "that"};
     run();
 }
 
-TEST_CASE_METHOD(TApp, "BeforeRequirements", "[app]") {
+TEST_CASE_METHOD(TApp, "BeforeRequirements", "[app]")
+{
     app.add_flag_function("-a", [](std::int64_t) { throw CLI::Success(); });
     app.add_flag_function("-b", [](std::int64_t) { throw CLI::CallForHelp(); });
 
@@ -2834,9 +3033,10 @@ TEST_CASE_METHOD(TApp, "BeforeRequirements", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "CustomUserSepParse", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParse", "[app]")
+{
 
-    std::vector<int> vals{1, 2, 3};
+    std::vector<int> vals {1, 2, 3};
     args = {"--idx", "1,2,3"};
     auto *opt = app.add_option("--idx", vals)->delimiter(',');
     run();
@@ -2854,7 +3054,8 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParse", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "DefaultUserSepParse", "[app]") {
+TEST_CASE_METHOD(TApp, "DefaultUserSepParse", "[app]")
+{
 
     std::vector<std::string> vals;
     args = {"--idx", "1 2 3", "4 5 6"};
@@ -2867,7 +3068,8 @@ TEST_CASE_METHOD(TApp, "DefaultUserSepParse", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "BadUserSepParse", "[app]") {
+TEST_CASE_METHOD(TApp, "BadUserSepParse", "[app]")
+{
 
     std::vector<int> vals;
     app.add_option("--idx", vals);
@@ -2878,9 +3080,10 @@ TEST_CASE_METHOD(TApp, "BadUserSepParse", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "CustomUserSepParse2", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParse2", "[app]")
+{
 
-    std::vector<int> vals{1, 2, 3};
+    std::vector<int> vals {1, 2, 3};
     args = {"--idx", "1,2,"};
     auto *opt = app.add_option("--idx", vals)->delimiter(',');
     run();
@@ -2893,9 +3096,10 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParse2", "[app]") {
     CHECK(std::vector<int>({1, 2}) == vals);
 }
 
-TEST_CASE_METHOD(TApp, "CustomUserSepParseFunction", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParseFunction", "[app]")
+{
 
-    std::vector<int> vals{1, 2, 3};
+    std::vector<int> vals {1, 2, 3};
     args = {"--idx", "1,2,3"};
     app.add_option_function<std::vector<int>>("--idx", [&vals](std::vector<int> v) { vals = std::move(v); })
         ->delimiter(',');
@@ -2904,7 +3108,8 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParseFunction", "[app]") {
 }
 
 // delimiter removal
-TEST_CASE_METHOD(TApp, "CustomUserSepParseToggle", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParseToggle", "[app]")
+{
 
     std::vector<std::string> vals;
     args = {"--idx", "1,2,3"};
@@ -2920,7 +3125,8 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParseToggle", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "CustomUserSepParse3", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParse3", "[app]")
+{
 
     std::vector<int> vals = {1, 2, 3};
     args = {"--idx",
@@ -2938,7 +3144,8 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParse3", "[app]") {
 }
 
 // #209
-TEST_CASE_METHOD(TApp, "CustomUserSepParse4", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParse4", "[app]")
+{
 
     std::vector<int> vals;
     args = {"--idx", "1,    2"};
@@ -2954,7 +3161,8 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParse4", "[app]") {
 }
 
 // #218
-TEST_CASE_METHOD(TApp, "CustomUserSepParse5", "[app]") {
+TEST_CASE_METHOD(TApp, "CustomUserSepParse5", "[app]")
+{
 
     std::vector<std::string> bar;
     args = {"this", "is", "a", "test"};
@@ -2970,23 +3178,28 @@ TEST_CASE_METHOD(TApp, "CustomUserSepParse5", "[app]") {
 }
 
 // #218
-TEST_CASE_METHOD(TApp, "logFormSingleDash", "[app]") {
-    bool verbose{false};
-    bool veryverbose{false};
-    bool veryveryverbose{false};
+TEST_CASE_METHOD(TApp, "logFormSingleDash", "[app]")
+{
+    bool verbose {false};
+    bool veryverbose {false};
+    bool veryveryverbose {false};
     app.name("testargs");
     app.allow_extras();
     args = {"-v", "-vv", "-vvv"};
     app.final_callback([&]() {
         auto rem = app.remaining();
-        for(auto &arg : rem) {
-            if(arg == "-v") {
+        for (auto &arg : rem)
+        {
+            if (arg == "-v")
+            {
                 verbose = true;
             }
-            if(arg == "-vv") {
+            if (arg == "-vv")
+            {
                 veryverbose = true;
             }
-            if(arg == "-vvv") {
+            if (arg == "-vvv")
+            {
                 veryveryverbose = true;
             }
         }
@@ -2998,8 +3211,9 @@ TEST_CASE_METHOD(TApp, "logFormSingleDash", "[app]") {
     CHECK(veryveryverbose);
 }
 
-TEST_CASE("C20_compile", "simple") {
-    CLI::App app{"test"};
+TEST_CASE("C20_compile", "simple")
+{
+    CLI::App app {"test"};
     auto *flag = app.add_flag("--flag", "desc");
 
     app.parse("--flag");
@@ -3007,21 +3221,23 @@ TEST_CASE("C20_compile", "simple") {
 }
 
 #ifdef _WIN32
-static int spawn_subprocess_win32(const wchar_t *path, wchar_t *commandline) {
-    STARTUPINFOW si{};
+static int spawn_subprocess_win32(const wchar_t *path, wchar_t *commandline)
+{
+    STARTUPINFOW si {};
     si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
+    PROCESS_INFORMATION pi {};
     REQUIRE(CreateProcessW(path, commandline, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi));
     WaitForSingleObject(pi.hProcess, INFINITE);
 
-    DWORD exitcode;  // NOLINT(cppcoreguidelines-init-variables)
+    DWORD exitcode; // NOLINT(cppcoreguidelines-init-variables)
     REQUIRE(GetExitCodeProcess(pi.hProcess, &exitcode));
 
     return static_cast<int>(exitcode);
 }
 #else
 #include <pthread.h>
-static int spawn_subprocess_posix(const char *path, char *const *argv) {
+static int spawn_subprocess_posix(const char *path, char *const *argv)
+{
     // NOLINTBEGIN(cppcoreguidelines-init-variables)
     pid_t pid;
     sigset_t old, reset;
@@ -3040,9 +3256,9 @@ static int spawn_subprocess_posix(const char *path, char *const *argv) {
     sigprocmask(SIG_BLOCK, &sa.sa_mask, &old);
 
     sigemptyset(&reset);
-    if(oldint.sa_handler != SIG_IGN)
+    if (oldint.sa_handler != SIG_IGN)
         sigaddset(&reset, SIGINT);
-    if(oldquit.sa_handler != SIG_IGN)
+    if (oldquit.sa_handler != SIG_IGN)
         sigaddset(&reset, SIGQUIT);
     posix_spawnattr_init(&attr);
     posix_spawnattr_setsigmask(&attr, &old);
@@ -3050,8 +3266,9 @@ static int spawn_subprocess_posix(const char *path, char *const *argv) {
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
     CHECK((ret = posix_spawn(&pid, path, nullptr, &attr, argv, nullptr)) == 0);
 
-    if(ret == 0)
-        while(waitpid(pid, &status, 0) < 0 && errno != EINTR) {
+    if (ret == 0)
+        while (waitpid(pid, &status, 0) < 0 && errno != EINTR)
+        {
         }
 
     sigaction(SIGINT, &oldint, nullptr);
@@ -3062,15 +3279,16 @@ static int spawn_subprocess_posix(const char *path, char *const *argv) {
 }
 #endif
 
-static int spawn_app_exe(const tchar *path) {
+static int spawn_app_exe(const tchar *path)
+{
 #ifdef _WIN32
-    std::wstring args{L"app_exe 1234 false \"hello world\""};
+    std::wstring args {L"app_exe 1234 false \"hello world\""};
     return spawn_subprocess_win32(path, &args[0]);
 #else
-    std::string arg0{"app_exe"};
-    std::string arg1{"1234"};
-    std::string arg2{"false"};
-    std::string arg3{"hello world"};
+    std::string arg0 {"app_exe"};
+    std::string arg1 {"1234"};
+    std::string arg2 {"false"};
+    std::string arg3 {"hello world"};
     // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     char *const args[] = {&arg0[0], &arg1[0], &arg2[0], &arg3[0], nullptr};
     return spawn_subprocess_posix(path, args);
@@ -3078,36 +3296,44 @@ static int spawn_app_exe(const tchar *path) {
 }
 
 // #845
-TEST_CASE("Ensure UTF-8", "[app]") {
+TEST_CASE("Ensure UTF-8", "[app]")
+{
     auto retval = spawn_app_exe(PLATFORM_TEXT(CLI11_ENSURE_UTF8_EXE));
 
-    if(retval == -1) {
+    if (retval == -1)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_EXE " reported that argv pointer changed where it should not have been");
     }
 
-    if(retval > 0) {
+    if (retval > 0)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_EXE " reported different argv at index " << (retval - 1));
     }
 
-    if(retval != 0) {
+    if (retval != 0)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_EXE " failed with an unknown return code");
     }
 }
 
 // #845
-TEST_CASE("Ensure UTF-8 called twice", "[app]") {
+TEST_CASE("Ensure UTF-8 called twice", "[app]")
+{
     auto retval = spawn_app_exe(PLATFORM_TEXT(CLI11_ENSURE_UTF8_TWICE_EXE));
 
-    if(retval == -1) {
+    if (retval == -1)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_TWICE_EXE
              " reported that argv pointer changed where it should not have been");
     }
 
-    if(retval > 0) {
+    if (retval > 0)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_TWICE_EXE " reported different argv at index " << (retval - 1));
     }
 
-    if(retval != 0) {
+    if (retval != 0)
+    {
         FAIL("Executable " CLI11_ENSURE_UTF8_TWICE_EXE " failed with an unknown return code");
     }
 }

@@ -14,3 +14,4 @@ export import :app;
 export import :config;
 export import :formatter;
 export import :extra_validators;
+export import :version;

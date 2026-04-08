@@ -34,33 +34,39 @@ import :encoding;
 #endif
 // [CLI11:argv_inl_includes:end]
 
-export namespace CLI {
+export namespace CLI
+{
 
-namespace detail {
+    namespace detail
+    {
 
 #ifdef _WIN32
-std::vector<std::string> compute_win32_argv() {
-    std::vector<std::string> result;
-    int argc = 0;
+        std::vector<std::string> compute_win32_argv()
+        {
+            std::vector<std::string> result;
+            int argc = 0;
 
-    auto deleter = [](wchar_t **ptr) { LocalFree(ptr); };
-    // NOLINTBEGIN(*-avoid-c-arrays)
-    auto wargv = std::unique_ptr<wchar_t *[], decltype(deleter)>(CommandLineToArgvW(GetCommandLineW(), &argc), deleter);
-    // NOLINTEND(*-avoid-c-arrays)
+            auto deleter = [](wchar_t **ptr) { LocalFree(ptr); };
+            // NOLINTBEGIN(*-avoid-c-arrays)
+            auto wargv =
+                std::unique_ptr<wchar_t *[], decltype(deleter)>(CommandLineToArgvW(GetCommandLineW(), &argc), deleter);
+            // NOLINTEND(*-avoid-c-arrays)
 
-    if(wargv == nullptr) {
-        throw std::runtime_error("CommandLineToArgvW failed with code " + std::to_string(GetLastError()));
-    }
+            if (wargv == nullptr)
+            {
+                throw std::runtime_error("CommandLineToArgvW failed with code " + std::to_string(GetLastError()));
+            }
 
-    result.reserve(static_cast<size_t>(argc));
-    for(size_t i = 0; i < static_cast<size_t>(argc); ++i) {
-        result.push_back(narrow(wargv[i]));
-    }
+            result.reserve(static_cast<size_t>(argc));
+            for (size_t i = 0; i < static_cast<size_t>(argc); ++i)
+            {
+                result.push_back(narrow(wargv[i]));
+            }
 
-    return result;
-}
+            return result;
+        }
 #endif
 
-}  // namespace detail
+    } // namespace detail
 
-}  // namespace CLI
+} // namespace CLI
