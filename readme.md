@@ -2,8 +2,9 @@ Fork of cli11 to named modules.
 Requirements
 
 - C++26
-- stdlib with filesystem
+- stdlib with filesystem and stdlib module support
 - RTTI
+- CMake >= 4.0
 
 Tested with upstream LLVM and latest release LLVM. 
 ```
