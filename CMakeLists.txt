@@ -1,29 +1,23 @@
-cmake_minimum_required(VERSION 4.2)
-set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
+cmake_minimum_required(VERSION 4.4)
+project(
+    cli
+    VERSION 2.6.2
+    DESCRIPTION
+        "Command line parser that provides a rich feature set with a simple and intuitive interface."
+    LANGUAGES C CXX)
+set(CMAKE_EXPERIMENTAL_FIND_CPS_PACKAGES ON)
 set(CMAKE_CXX_MODULE_STD ON)
-project(cli VERSION 0.0.0 DESCRIPTION "placeholder" LANGUAGES C CXX)
-
-set(_CONAN_HOST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/conan/full_deploy/host")
-file(GLOB _CONAN_PACKAGES LIST_DIRECTORIES true "${_CONAN_HOST_DIR}/*/*/*/*")
-file(GLOB _CONAN_PACKAGES_CMAKE LIST_DIRECTORIES true "${_CONAN_HOST_DIR}/*/*/*/*/share/cmake/*")
-list(APPEND CMAKE_PREFIX_PATH ${_CONAN_PACKAGES} ${_CONAN_PACKAGES_CMAKE})
-file(GLOB _CONAN_PACKAGES_PKG LIST_DIRECTORIES true "${_CONAN_HOST_DIR}/*/*/*/*/lib/pkgconfig")
-if(DEFINED ENV{PKG_CONFIG_LIBDIR})
-  set(ENV{PKG_CONFIG_LIBDIR} "${_CONAN_PACKAGES_PKG}:$ENV{PKG_CONFIG_LIBDIR}")
-else()
-  set(ENV{PKG_CONFIG_LIBDIR} "${_CONAN_PACKAGES_PKG}")
-endif()
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_EXTENSIONS ON)
+include(GNUInstallDirs)
+include(options.cmake)
 add_subdirectory(src)
-option(CLI_BUILD_TESTS "Build tests" OFF)
-option(CLI_BUILD_EXAMPLES "Build examples" OFF)
-
 if(BUILD_TESTS)
     include(CTest)
     add_subdirectory(tests)
 endif()
-
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

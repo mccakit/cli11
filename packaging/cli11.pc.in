@@ -1,8 +1,0 @@
-prefix=@CMAKE_INSTALL_PREFIX@
-libdir=${prefix}/lib
-
-Name: cli11
-Version: @PROJECT_VERSION@
-Description: @PROJECT_DESCRIPTION@
-Libs: -L${libdir} -lcli11
-Cflags: -fprebuilt-module-path=${libdir}/cxx/bmi
