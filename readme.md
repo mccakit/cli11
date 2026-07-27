@@ -1,13 +1,14 @@
-Fork of cli11 to named modules. 
-Requirements
+# cli11
+User Manual | Api Reference
 
-- C++26
-- stdlib with filesystem and stdlib module support
-- RTTI
-- CMake >= 4.0
+cli11 is the C++ module fork of CLI11, a command line parser for C++11 and beyond that provides a rich feature set with a simple and intuitive interface.
 
-Tested with upstream LLVM and latest release LLVM. 
+Project is built using CMake and packaged via CPS. CMake 4.4 and later is required, ninja is recommended for building.
+
+Build using cmake, and consume via CPS by pointing to `CMAKE_INSTALL_PREFIX` via `CMAKE_PREFIX_PATH`
+
+```cmake
+find_package(cli11)
+target_link_libraries($PROJECT PRIVATE cli11::cxx_module)
 ```
-conan install . --build=missing --profile=musl -of ./conan --deployer=full_deploy --envs-generation=false
-cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=/home/mccakit/dev/toolchains/static/cmake/x86_64-unknown-linux-musl.cmake
-```
+
