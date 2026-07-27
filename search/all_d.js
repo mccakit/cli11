@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['name_0',['name',['../structcli_1_1config__item__t.html#afea236cd99c767be6152541696b24567',1,'cli::config_item_t::name'],['../structcli_1_1detail_1_1split__result__t.html#ac45fe0a4645d2e55bf87a4afa9103fef',1,'cli::detail::split_result_t::name'],['../structcli_1_1detail_1_1program__name__t.html#af224763da8e6a0a1014e0108ed7c2781',1,'cli::detail::program_name_t::name'],['../classcli_1_1app__t.html#ac7b427d5ec735883c690d6d6023752e0',1,'cli::app_t::name()'],['../classcli_1_1validator__t.html#a191118efce71327947b3d8421c60a126',1,'cli::validator_t::name(std::string validator_name) -&gt; validator_t &amp;'],['../classcli_1_1validator__t.html#a2ecabca6533b456acfb448a42a5dee63',1,'cli::validator_t::name(std::string validator_name) const -&gt; validator_t']]],
+  ['name_5f_1',['name_',['../classcli_1_1app__t.html#a4df852b4c54a167b5e64dac8943f4eff',1,'cli::app_t::name_'],['../classcli_1_1validator__t.html#a4b11c3fc40dfb9f63c5f4ff17b779039',1,'cli::validator_t::name_']]],
+  ['name_5fmatch_5ft_2',['name_match_t',['../classcli_1_1app__t.html#a9755f4c538d213a565227465a9cefa7d',1,'cli::app_t']]],
+  ['narrow_3',['narrow',['../encoding_8cpp.html#ae96521e32f550c9ff9bab65495f6d757',1,'cli::narrow(const wchar_t *str, std::size_t str_size) -&gt; std::string'],['../encoding_8cpp.html#a4c2ae6492fe3a9f4d4e2c4727e7b7310',1,'cli::narrow(const std::wstring &amp;str) -&gt; std::string'],['../encoding_8cpp.html#a770258066b0231cc5320bbdc80582123',1,'cli::narrow(const wchar_t *str) -&gt; std::string'],['../encoding_8cpp.html#a714b10cd9eda202c53eade7ead07c000',1,'cli::narrow(std::wstring_view str) -&gt; std::string']]],
+  ['narrow_5fimpl_4',['narrow_impl',['../encoding_8cpp.html#a8d3a71002e01eb2048b92ae3c5702bfa',1,'cli::detail']]],
+  ['narrow_5fstring_5fguard_5',['narrow_string_guard',['../conceptcli_1_1detail_1_1narrow__string__guard.html',1,'cli::detail']]],
+  ['need_5foptions_5f_6',['need_options_',['../classcli_1_1app__t.html#a80d8b3eedbf05434165ccc00e70af3ab',1,'cli::app_t']]],
+  ['need_5fsubcommands_5f_7',['need_subcommands_',['../classcli_1_1app__t.html#a8ee36c3888e8f886e97c62cc0d8f571a',1,'cli::app_t']]],
+  ['needs_8',['needs',['../classcli_1_1app__t.html#a6d392356e330488f7d49398c07b8c41d',1,'cli::app_t::needs(option_t *opt) -&gt; app_t *'],['../classcli_1_1app__t.html#af3390cc9ada1f7df821cf3d68a2b0aef',1,'cli::app_t::needs(app_t *app) -&gt; app_t *'],['../classcli_1_1option__t.html#a030cc04557ef86991191e988b4f3b3b6',1,'cli::option_t::needs(option_t *opt) -&gt; option_t *'],['../classcli_1_1option__t.html#aff5b2d18f543aa5f7f248fa9501c0a9f',1,'cli::option_t::needs(std::string opt_name) -&gt; option_t *'],['../classcli_1_1option__t.html#a00d21541cd9c842899677c9ac97cd7ca',1,'cli::option_t::needs(A opt, B opt1, args_t... args) -&gt; option_t *']]],
+  ['needs_5f_9',['needs_',['../classcli_1_1option__t.html#a36dab0e597d012eb5933a53461299b5d',1,'cli::option_t']]],
+  ['non_5fempty_5ffile_10',['non_empty_file',['../extra__validators_8cpp.html#a84db2a18bbe85bfd4668867e701840c5',1,'cli']]],
+  ['non_5fmodifying_11',['non_modifying',['../classcli_1_1validator__t.html#a1b2440fcdd0113c37e313062521d19b6',1,'cli::validator_t']]],
+  ['non_5fmodifying_5f_12',['non_modifying_',['../classcli_1_1validator__t.html#add453a5a7a03f3a3f3ec709734b4bef9',1,'cli::validator_t']]],
+  ['non_5fnegative_5fnumber_13',['non_negative_number',['../validators_8cpp.html#a2870d26ca5b9e20c9f00b1b4f18365e1',1,'cli']]],
+  ['none_14',['none',['../classcli_1_1app__t.html#a9755f4c538d213a565227465a9cefa7da334c4a4c42fdb79d7ebc3e73b517e6f8',1,'cli::app_t::none'],['../app_8cpp.html#a0273eb7af3554f7d52a8434e2e87e44ba334c4a4c42fdb79d7ebc3e73b517e6f8',1,'nonecli::detail'],['../extra__validators_8cpp.html#ac334205edc2767cc9afa0fcf88cfa797a334c4a4c42fdb79d7ebc3e73b517e6f8',1,'nonecli::detail']]],
+  ['nonexistent_15',['nonexistent',['../validators_8cpp.html#a30176352c8574900e67e4b46b0f55bc9a357f5c155c9da6842b84ad1066996928',1,'cli::detail']]],
+  ['nonexistent_5fpath_16',['nonexistent_path',['../validators_8cpp.html#aad013c2a1c54bd4c23c8cb7b1f241538',1,'cli']]],
+  ['nonpositional_17',['nonpositional',['../classcli_1_1option__t.html#aafc93eb771a26ee9ca85bbc5d5ce0b16',1,'cli::option_t']]],
+  ['normal_18',['normal',['../formatter__fwd_8cpp.html#a80f33bb9598018e8962c328ffb4b86ebafea087517c26fadd409bd4b9dc642555',1,'normalcli'],['../option_8cpp.html#ab9863c7266496f792b6ab54db0156844afea087517c26fadd409bd4b9dc642555',1,'normalcli']]],
+  ['normal_5fpre_5fhelp_19',['normal_pre_help',['../option_8cpp.html#ab9863c7266496f792b6ab54db0156844a9f4b0090b9e00f6ac5a8f4b9a22271d0',1,'cli']]],
+  ['not_5fconfigurable_20',['not_configurable',['../classcli_1_1config__error__t.html#ab6755db227fbeed233fe3d2a8119db08',1,'cli::config_error_t']]],
+  ['number_21',['number',['../extra__validators_8cpp.html#a9cbb95d8ec0e8422c567b31f24e25839',1,'cli']]],
+  ['number_5fconstructible_22',['number_constructible',['../type__tools_8cpp.html#a2adad2803b50b3417791e9571d1943fea9bf8b18f29e589bda0f99393c94386d9',1,'cli::detail']]],
+  ['number_5fconstructible_5flike_23',['number_constructible_like',['../conceptcli_1_1detail_1_1number__constructible__like.html',1,'cli::detail']]]
+];

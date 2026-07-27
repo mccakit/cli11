@@ -1,0 +1,10 @@
+var searchData=
+[
+  ['name_0',['name',['../classcli_1_1app__t.html#ac7b427d5ec735883c690d6d6023752e0',1,'cli::app_t::name()'],['../classcli_1_1validator__t.html#a191118efce71327947b3d8421c60a126',1,'cli::validator_t::name(std::string validator_name) -&gt; validator_t &amp;'],['../classcli_1_1validator__t.html#a2ecabca6533b456acfb448a42a5dee63',1,'cli::validator_t::name(std::string validator_name) const -&gt; validator_t']]],
+  ['narrow_1',['narrow',['../encoding_8cpp.html#ae96521e32f550c9ff9bab65495f6d757',1,'cli::narrow(const wchar_t *str, std::size_t str_size) -&gt; std::string'],['../encoding_8cpp.html#a4c2ae6492fe3a9f4d4e2c4727e7b7310',1,'cli::narrow(const std::wstring &amp;str) -&gt; std::string'],['../encoding_8cpp.html#a770258066b0231cc5320bbdc80582123',1,'cli::narrow(const wchar_t *str) -&gt; std::string'],['../encoding_8cpp.html#a714b10cd9eda202c53eade7ead07c000',1,'cli::narrow(std::wstring_view str) -&gt; std::string']]],
+  ['narrow_5fimpl_2',['narrow_impl',['../encoding_8cpp.html#a8d3a71002e01eb2048b92ae3c5702bfa',1,'cli::detail']]],
+  ['needs_3',['needs',['../classcli_1_1app__t.html#a6d392356e330488f7d49398c07b8c41d',1,'cli::app_t::needs(option_t *opt) -&gt; app_t *'],['../classcli_1_1app__t.html#af3390cc9ada1f7df821cf3d68a2b0aef',1,'cli::app_t::needs(app_t *app) -&gt; app_t *'],['../classcli_1_1option__t.html#a030cc04557ef86991191e988b4f3b3b6',1,'cli::option_t::needs(option_t *opt) -&gt; option_t *'],['../classcli_1_1option__t.html#aff5b2d18f543aa5f7f248fa9501c0a9f',1,'cli::option_t::needs(std::string opt_name) -&gt; option_t *'],['../classcli_1_1option__t.html#a00d21541cd9c842899677c9ac97cd7ca',1,'cli::option_t::needs(A opt, B opt1, args_t... args) -&gt; option_t *']]],
+  ['non_5fmodifying_4',['non_modifying',['../classcli_1_1validator__t.html#a1b2440fcdd0113c37e313062521d19b6',1,'cli::validator_t']]],
+  ['nonpositional_5',['nonpositional',['../classcli_1_1option__t.html#aafc93eb771a26ee9ca85bbc5d5ce0b16',1,'cli::option_t']]],
+  ['not_5fconfigurable_6',['not_configurable',['../classcli_1_1config__error__t.html#ab6755db227fbeed233fe3d2a8119db08',1,'cli::config_error_t']]]
+];
