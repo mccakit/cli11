@@ -1,5 +1,5 @@
 # cli11
-User Manual | Api Reference
+User Manual | [Api Reference](https://mccakit.github.io/cli11/)
 
 cli11 is the C++ module fork of CLI11, a command line parser for C++11 and beyond that provides a rich feature set with a simple and intuitive interface.
 
