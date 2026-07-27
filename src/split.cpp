@@ -1,67 +1,96 @@
+/// @file
+/// @brief Decomposition of command-line arguments and name specifications.
+///
+/// Two separate jobs live here. The `split_*` functions take one argument off
+/// the command line and pull it apart into a name and a value. The `get_names`
+/// and `get_default_flag_values` functions take a name specification as written
+/// by the caller — something like `"-f,--file,filename"` — and work out what
+/// was meant.
+
 export module cli11:split;
 
 import std;
 import :error;
 import :string_tools;
 
-export namespace CLI
+export namespace cli
 {
 
     namespace detail
     {
 
-        bool split_short(const std::string &current, std::string &name, std::string &rest)
+        /// @brief One argument pulled apart into a name and the text following it.
+        struct split_result_t
+        {
+                /// @brief The option name, with any leading dashes or slash removed.
+                std::string name;
+
+                /// @brief The text that followed the name.
+                ///
+                /// For @ref split_long and @ref split_windows_style this is the value
+                /// after the separator, empty when no separator was present. For
+                /// @ref split_short it is the remainder of the argument, which may hold
+                /// further bundled short options rather than a value.
+                std::string value;
+        };
+
+        /// @brief Splits a short-form argument such as `-fvalue`.
+        ///
+        /// @param current The argument to split.
+        /// @return The single-character name and the remainder of the argument, or
+        /// `std::nullopt` if @p current is not a short-form argument.
+        [[nodiscard]] auto split_short(const std::string &current) -> std::optional<split_result_t>
         {
             if (current.size() > 1 && current[0] == '-' && valid_first_char(current[1]))
             {
-                name = current.substr(1, 1);
-                rest = current.substr(2);
-                return true;
+                return split_result_t {current.substr(1, 1), current.substr(2)};
             }
-            return false;
+            return std::nullopt;
         }
 
-        bool split_long(const std::string &current, std::string &name, std::string &value)
+        /// @brief Splits a long-form argument such as `--file=value`.
+        ///
+        /// @param current The argument to split.
+        /// @return The name and the value after `=`, or `std::nullopt` if @p current
+        /// is not a long-form argument. The value is empty when there is no `=`.
+        [[nodiscard]] auto split_long(const std::string &current) -> std::optional<split_result_t>
         {
             if (current.size() > 2 && current.compare(0, 2, "--") == 0 && valid_first_char(current[2]))
             {
-                auto loc = current.find_first_of('=');
+                const auto loc = current.find_first_of('=');
                 if (loc != std::string::npos)
                 {
-                    name = current.substr(2, loc - 2);
-                    value = current.substr(loc + 1);
+                    return split_result_t {current.substr(2, loc - 2), current.substr(loc + 1)};
                 }
-                else
-                {
-                    name = current.substr(2);
-                    value = "";
-                }
-                return true;
+                return split_result_t {current.substr(2), {}};
             }
-            return false;
+            return std::nullopt;
         }
 
-        bool split_windows_style(const std::string &current, std::string &name, std::string &value)
+        /// @brief Splits a Windows-style argument such as `/file:value`.
+        ///
+        /// @param current The argument to split.
+        /// @return The name and the value after `:`, or `std::nullopt` if @p current
+        /// is not a Windows-style argument. The value is empty when there is no `:`.
+        [[nodiscard]] auto split_windows_style(const std::string &current) -> std::optional<split_result_t>
         {
             if (current.size() > 1 && current[0] == '/' && valid_first_char(current[1]))
             {
-                auto loc = current.find_first_of(':');
+                const auto loc = current.find_first_of(':');
                 if (loc != std::string::npos)
                 {
-                    name = current.substr(1, loc - 1);
-                    value = current.substr(loc + 1);
+                    return split_result_t {current.substr(1, loc - 1), current.substr(loc + 1)};
                 }
-                else
-                {
-                    name = current.substr(1);
-                    value = "";
-                }
-                return true;
+                return split_result_t {current.substr(1), {}};
             }
-            return false;
+            return std::nullopt;
         }
 
-        std::vector<std::string> split_names(std::string current)
+        /// @brief Splits a comma-separated name specification, trimming each entry.
+        ///
+        /// @param current The specification to split.
+        /// @return The individual names, each trimmed of surrounding whitespace.
+        [[nodiscard]] auto split_names(std::string current) -> std::vector<std::string>
         {
             std::vector<std::string> output;
             std::size_t val = 0;
@@ -74,23 +103,28 @@ export namespace CLI
             return output;
         }
 
-        std::vector<std::pair<std::string, std::string>> get_default_flag_values(const std::string &str)
+        /// @brief Extracts the default values written into a flag specification.
+        ///
+        /// Recognises `name{value}` for an explicit default and a leading `!` for a
+        /// negated flag, which defaults to `"false"`. Entries carrying neither are
+        /// skipped.
+        ///
+        /// @param str The flag specification, for example `"--flag{7},!--no-flag"`.
+        /// @return Each flag name paired with its default value.
+        [[nodiscard]] auto get_default_flag_values(const std::string &str)
+            -> std::vector<std::pair<std::string, std::string>>
         {
             std::vector<std::string> flags = split_names(str);
-            flags.erase(std::remove_if(
-                            flags.begin(),
-                            flags.end(),
-                            [](const std::string &name) {
-                                return ((name.empty()) ||
-                                        (!(((name.find_first_of('{') != std::string::npos) && (name.back() == '}')) ||
-                                           (name[0] == '!'))));
-                            }),
-                        flags.end());
+            std::erase_if(flags, [](const std::string &name) {
+                return ((name.empty()) || (!(((name.find_first_of('{') != std::string::npos) && (name.back() == '}')) ||
+                                             (name[0] == '!'))));
+            });
+
             std::vector<std::pair<std::string, std::string>> output;
             output.reserve(flags.size());
             for (auto &flag : flags)
             {
-                auto def_start = flag.find_first_of('{');
+                const auto def_start = flag.find_first_of('{');
                 std::string defval = "false";
                 if ((def_start != std::string::npos) && (flag.back() == '}'))
                 {
@@ -104,13 +138,30 @@ export namespace CLI
             return output;
         }
 
-        std::tuple<std::vector<std::string>, std::vector<std::string>, std::string> get_names(
-            const std::vector<std::string> &input, bool allow_non_standard = false)
+        /// @brief The names extracted from a name specification, sorted by kind.
+        struct option_names_t
         {
+                /// @brief Short names, without their leading dash.
+                std::vector<std::string> short_names;
 
-            std::vector<std::string> short_names;
-            std::vector<std::string> long_names;
-            std::string pos_name;
+                /// @brief Long names, without their leading dashes.
+                std::vector<std::string> long_names;
+
+                /// @brief The positional name, empty if none was given.
+                std::string positional_name;
+        };
+
+        /// @brief Sorts a name specification into short, long, and positional names.
+        ///
+        /// @param input The individual names, as produced by @ref split_names.
+        /// @param allow_non_standard Accept multi-character short names such as `-abc`.
+        /// @return The names, sorted by kind.
+        /// @throws cli::bad_name_string_t If a name is malformed, reserved, or if more
+        /// than one positional name is given.
+        [[nodiscard]] auto get_names(const std::vector<std::string> &input, bool allow_non_standard = false)
+            -> option_names_t
+        {
+            option_names_t output;
 
             for (std::string name : input)
             {
@@ -122,7 +173,7 @@ export namespace CLI
                 {
                     if (name.length() == 2 && valid_first_char(name[1]))
                     {
-                        short_names.emplace_back(1, name[1]);
+                        output.short_names.emplace_back(1, name[1]);
                     }
                     else if (name.length() > 2)
                     {
@@ -131,21 +182,21 @@ export namespace CLI
                             name = name.substr(1);
                             if (valid_name_string(name))
                             {
-                                short_names.push_back(name);
+                                output.short_names.push_back(name);
                             }
                             else
                             {
-                                throw BadNameString::BadLongName(name);
+                                throw bad_name_string_t::bad_long_name(name);
                             }
                         }
                         else
                         {
-                            throw BadNameString::MissingDash(name);
+                            throw bad_name_string_t::missing_dash(name);
                         }
                     }
                     else
                     {
-                        throw BadNameString::OneCharName(name);
+                        throw bad_name_string_t::one_char_name(name);
                     }
                 }
                 else if (name.length() > 2 && name.substr(0, 2) == "--")
@@ -153,36 +204,36 @@ export namespace CLI
                     name = name.substr(2);
                     if (valid_name_string(name))
                     {
-                        long_names.push_back(name);
+                        output.long_names.push_back(name);
                     }
                     else
                     {
-                        throw BadNameString::BadLongName(name);
+                        throw bad_name_string_t::bad_long_name(name);
                     }
                 }
                 else if (name == "-" || name == "--" || name == "++")
                 {
-                    throw BadNameString::ReservedName(name);
+                    throw bad_name_string_t::reserved_name(name);
                 }
                 else
                 {
-                    if (!pos_name.empty())
+                    if (!output.positional_name.empty())
                     {
-                        throw BadNameString::MultiPositionalNames(name);
+                        throw bad_name_string_t::multi_positional_names(name);
                     }
                     if (valid_name_string(name))
                     {
-                        pos_name = name;
+                        output.positional_name = name;
                     }
                     else
                     {
-                        throw BadNameString::BadPositionalName(name);
+                        throw bad_name_string_t::bad_positional_name(name);
                     }
                 }
             }
-            return std::make_tuple(short_names, long_names, pos_name);
+            return output;
         }
 
     } // namespace detail
 
-} // namespace CLI
+} // namespace cli

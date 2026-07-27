@@ -1,7 +1,14 @@
-export module cli11:argv;
+/// @file
+/// @brief Recovery of the original command line on Windows.
+///
+/// The `argv` handed to `main` on Windows has already been narrowed to the
+/// active code page, which loses any character the code page cannot represent.
+/// @ref cli::detail::compute_win32_argv goes back to the process's real command
+/// line and re-narrows it as UTF-8 instead.
+///
+/// This partition contributes nothing on other platforms.
 
-import std;
-import :encoding;
+module;
 
 // [CLI11:argv_inl_includes:verbatim]
 #if defined(_WIN32)
@@ -34,14 +41,27 @@ import :encoding;
 #endif
 // [CLI11:argv_inl_includes:end]
 
-export namespace CLI
+export module cli11:argv;
+
+import std;
+import :encoding;
+
+export namespace cli
 {
 
     namespace detail
     {
 
 #ifdef _WIN32
-        std::vector<std::string> compute_win32_argv()
+
+        /// @brief Rebuilds the command line as UTF-8, bypassing the active code page.
+        ///
+        /// Reads the process command line with `GetCommandLineW`, splits it with
+        /// `CommandLineToArgvW`, and narrows each argument through @ref cli::narrow.
+        ///
+        /// @return The arguments, including the program name at index zero.
+        /// @throws std::runtime_error If the command line cannot be split.
+        auto compute_win32_argv() -> std::vector<std::string>
         {
             std::vector<std::string> result;
             int argc = 0;
@@ -54,19 +74,21 @@ export namespace CLI
 
             if (wargv == nullptr)
             {
-                throw std::runtime_error("CommandLineToArgvW failed with code " + std::to_string(GetLastError()));
+                throw std::runtime_error(std::format("CommandLineToArgvW failed with code {}", GetLastError()));
             }
 
-            result.reserve(static_cast<size_t>(argc));
-            for (size_t i = 0; i < static_cast<size_t>(argc); ++i)
+            const auto args = std::span {wargv.get(), static_cast<std::size_t>(argc)};
+            result.reserve(args.size());
+            for (wchar_t *arg : args)
             {
-                result.push_back(narrow(wargv[i]));
+                result.push_back(narrow(arg));
             }
 
             return result;
         }
+
 #endif
 
     } // namespace detail
 
-} // namespace CLI
+} // namespace cli

@@ -8,7 +8,7 @@ export struct SubcommandAOptions {
     bool with_foo;
 };
 
-export void setup_subcommand_a(CLI::App &app) {
+export void setup_subcommand_a(cli::app_t &app) {
     auto opt = std::make_shared<SubcommandAOptions>();
     auto *sub = app.add_subcommand("subcommand_a", "performs subcommand a");
     sub->add_option("-f,--file", opt->file, "File name")->required();

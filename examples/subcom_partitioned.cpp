@@ -9,18 +9,18 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::AutoTimer give_me_a_name("This is a timer");
+    cli::auto_timer_t give_me_a_name("This is a timer");
 
-    CLI::App app("K3Pi goofit fitter");
+    cli::app_t app("K3Pi goofit fitter");
 
-    CLI::App_p impOpt = std::make_shared<CLI::App>("Important");
+    cli::app_ptr_t impOpt = std::make_shared<cli::app_t>("Important");
     std::string file;
-    CLI::Option *opt = impOpt->add_option("-f,--file,file", file, "File name")->required();
+    cli::option_t *opt = impOpt->add_option("-f,--file,file", file, "File name")->required();
 
     int count {0};
-    CLI::Option *copt = impOpt->add_flag("-c,--count", count, "Counter")->required();
+    cli::option_t *copt = impOpt->add_flag("-c,--count", count, "Counter")->required();
 
-    CLI::App_p otherOpt = std::make_shared<CLI::App>("Other");
+    cli::app_ptr_t otherOpt = std::make_shared<cli::app_t>("Other");
     double value {0.0}; // = 3.14;
     otherOpt->add_option("-d,--double", value, "Some Value");
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

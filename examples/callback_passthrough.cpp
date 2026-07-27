@@ -10,7 +10,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("callback_passthrough");
+    cli::app_t app("callback_passthrough");
     app.allow_extras();
     std::string argName;
     std::string val;
@@ -18,7 +18,7 @@ int main(int argc, char **argv)
     app.callback([&app, &val, &argName]() {
         if (!argName.empty())
         {
-            CLI::App subApp;
+            cli::app_t subApp;
             subApp.add_option("--" + argName, val, "custom argument option");
             subApp.parse(app.remaining_for_passthrough());
         }
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

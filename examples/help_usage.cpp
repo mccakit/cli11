@@ -12,26 +12,26 @@ int main(int argc, char *argv[])
     int level {5}, subopt {0};
 
     // app caption
-    CLI::App app {"CLI11 help"};
+    cli::app_t app {"CLI11 help"};
     // this tests out some of the wide character support, mainly for compilation checking
     argv = app.ensure_utf8(argv);
     app.require_subcommand(1);
     // subcommands options and flags
-    CLI::App *const encode = app.add_subcommand("e", "encode")->ignore_case(); // ignore case
+    cli::app_t *const encode = app.add_subcommand("e", "encode")->ignore_case(); // ignore case
     encode->add_option("input", input_file_name, "input file")
         ->option_text(" ")
         ->required()
-        ->check(CLI::ExistingFile);                                                              // file must exist
+        ->check(cli::existing_file);                                                              // file must exist
     encode->add_option("output", output_file_name, "output file")->option_text(" ")->required(); // required option
     encode->add_option("-l, --level", level, "encoding level")
         ->option_text("[1..9]")
-        ->check(CLI::Range(1, 9))
+        ->check(cli::range_t(1, 9))
         ->default_val(5);                                  // limit parameter range
     encode->add_flag("-R, --remove", "remove input file"); // no parameter option
     encode->add_flag("-s, --suboption", subopt, "suboption")->option_text(" ");
 
-    CLI::App *const decode = app.add_subcommand("d", "decode")->ignore_case();
-    decode->add_option("input", input_file_name, "input file")->option_text(" ")->required()->check(CLI::ExistingFile);
+    cli::app_t *const decode = app.add_subcommand("d", "decode")->ignore_case();
+    decode->add_option("input", input_file_name, "input file")->option_text(" ")->required()->check(cli::existing_file);
     decode->add_option("output", output_file_name, "output file")->option_text(" ")->required();
 
     // Usage message modification
@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

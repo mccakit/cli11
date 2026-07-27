@@ -9,7 +9,7 @@ import cli11;
 
 int main(int argc, char *argv[])
 {
-    CLI::App cli_global {"Demo app"};
+    cli::app_t cli_global {"Demo app"};
     auto &cli_sub = *cli_global.add_subcommand("sub", "Some subcommand");
     std::string sub_arg;
     cli_sub.add_option("sub_arg", sub_arg, "Argument for subcommand")->required();
@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     {
         cli_global.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return cli_global.exit(e);
     }

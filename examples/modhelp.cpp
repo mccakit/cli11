@@ -9,7 +9,7 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::App test {R"raw(Modify the help print so that argument values are accessible.
+    cli::app_t test {R"raw(Modify the help print so that argument values are accessible.
 Note that this will not shortcut `->required` and other similar options.)raw"};
 
     // Remove help flag because it shortcuts all processing
@@ -25,9 +25,9 @@ Note that this will not shortcut `->required` and other similar options.)raw"};
     {
         test.parse(argc, argv);
         if (*help)
-            throw CLI::CallForHelp();
+            throw cli::call_for_help_t();
     }
-    catch (const CLI::Error &e)
+    catch (const cli::error_t &e)
     {
         std::cout << "Option -a string in help: " << some_option << '\n';
         return test.exit(e);

@@ -9,15 +9,15 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::AutoTimer give_me_a_name("This is a timer");
+    cli::auto_timer_t give_me_a_name("This is a timer");
 
-    CLI::App app("K3Pi goofit fitter");
+    cli::app_t app("K3Pi goofit fitter");
 
     std::string file;
-    CLI::Option *opt = app.add_option("-f,--file,file", file, "File name")->required()->group("Important");
+    cli::option_t *opt = app.add_option("-f,--file,file", file, "File name")->required()->group("Important");
 
     int count {0};
-    CLI::Option *copt = app.add_flag("-c,--count", count, "Counter")->required()->group("Important");
+    cli::option_t *copt = app.add_flag("-c,--count", count, "Counter")->required()->group("Important");
 
     double value {0.0}; // = 3.14;
     app.add_option("-d,--double", value, "Some Value")->group("Other");
@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

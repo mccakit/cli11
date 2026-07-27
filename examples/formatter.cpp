@@ -7,13 +7,13 @@
 import std;
 import cli11;
 
-class MyFormatter : public CLI::Formatter
+class MyFormatter : public cli::formatter_t
 {
     public:
-        MyFormatter() : Formatter()
+        MyFormatter() : formatter_t()
         {
         }
-        std::string make_option_opts(const CLI::Option *) const override
+        std::string make_option_opts(const cli::option_t *) const override
         {
             return " OPTION";
         }
@@ -21,7 +21,7 @@ class MyFormatter : public CLI::Formatter
 
 int main(int argc, char **argv)
 {
-    CLI::App app;
+    cli::app_t app;
     app.set_help_all_flag("--help-all", "Show all help");
 
     auto fmt = std::make_shared<MyFormatter>();
@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

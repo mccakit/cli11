@@ -10,33 +10,33 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("configuration print example");
+    cli::app_t app("configuration print example");
 
     app.add_flag("-p,--print", "Print configuration and exit")->configurable(false); // NEW: print flag
 
     std::string file;
-    CLI::Option *opt = app.add_option("-f,--file,file", file, "File name")
+    cli::option_t *opt = app.add_option("-f,--file,file", file, "File name")
                            ->capture_default_str()
                            ->run_callback_for_default(); // NEW: capture_default_str()
 
     int count {0};
-    CLI::Option *copt =
+    cli::option_t *copt =
         app.add_option("-c,--count", count, "Counter")->capture_default_str(); // NEW: capture_default_str()
 
     int v {0};
-    CLI::Option *flag = app.add_flag("--flag", v, "Some flag that can be passed multiple times")
+    cli::option_t *flag = app.add_flag("--flag", v, "Some flag that can be passed multiple times")
                             ->capture_default_str(); // NEW: capture_default_str()
 
     double value {0.0};                                                        // = 3.14;
     app.add_option("-d,--double", value, "Some Value")->capture_default_str(); // NEW: capture_default_str()
 
-    app.get_config_formatter_base()->quoteCharacter('"', '"');
+    app.get_config_formatter_base()->quote_character('"', '"');
 
     try
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

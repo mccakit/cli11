@@ -11,7 +11,7 @@ import test_helper;
 
 TEST_CASE("Timer: MSTimes", "[timer]")
 {
-    CLI::Timer timer {"My Timer"};
+    cli::timer_t timer {"My Timer"};
     std::this_thread::sleep_for(std::chrono::milliseconds(123));
     std::string output = timer.to_string();
     std::string new_output = (timer / 1000000).to_string();
@@ -39,7 +39,7 @@ TEST_CASE("Timer: STimes", "[timer]") {
 
 TEST_CASE("Timer: BigTimer", "[timer]")
 {
-    CLI::Timer timer {"My Timer", CLI::Timer::Big};
+    cli::timer_t timer {"My Timer", cli::timer_t::big};
     std::string output = timer.to_string();
     CHECK_THAT(output, Contains("Time ="));
     CHECK_THAT(output, Contains("-----------"));
@@ -47,7 +47,7 @@ TEST_CASE("Timer: BigTimer", "[timer]")
 
 TEST_CASE("Timer: AutoTimer", "[timer]")
 {
-    CLI::AutoTimer timer;
+    cli::auto_timer_t timer;
     std::string output = timer.to_string();
     CHECK_THAT(output, Contains("Timer"));
 }
@@ -55,7 +55,7 @@ TEST_CASE("Timer: AutoTimer", "[timer]")
 TEST_CASE("Timer: PrintTimer", "[timer]")
 {
     std::stringstream out;
-    CLI::AutoTimer timer;
+    cli::auto_timer_t timer;
     out << timer;
     std::string output = out.str();
     CHECK_THAT(output, Contains("Timer"));
@@ -63,7 +63,7 @@ TEST_CASE("Timer: PrintTimer", "[timer]")
 
 TEST_CASE("Timer: TimeItTimer", "[timer]")
 {
-    CLI::Timer timer;
+    cli::timer_t timer;
     std::string output = timer.time_it([]() { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }, .1);
     std::cout << output << '\n';
     CHECK_THAT(output, Contains("ms"));

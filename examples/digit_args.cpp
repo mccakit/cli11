@@ -9,7 +9,7 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::App app;
+    cli::app_t app;
 
     int val {0};
     // add a set of flags with default values associate with them
@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

@@ -12,11 +12,11 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("test for positional validation");
+    cli::app_t app("test for positional validation");
 
     int num1 {-1}, num2 {-1};
-    app.add_option("num1", num1, "first number")->check(CLI::Number);
-    app.add_option("num2", num2, "second number")->check(CLI::Number);
+    app.add_option("num1", num1, "first number")->check(cli::number);
+    app.add_option("num2", num2, "second number")->check(cli::number);
     std::string file1, file2;
     app.add_option("file1", file1, "first file")->required();
     app.add_option("file2", file2, "second file");
@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

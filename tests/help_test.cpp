@@ -11,7 +11,7 @@ import test_helper;
 
 TEST_CASE("THelp: Basic", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string help = app.help();
 
@@ -23,7 +23,7 @@ TEST_CASE("THelp: Basic", "[help]")
 
 TEST_CASE("THelp: Usage", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.usage("use: just use it");
 
     std::string help = app.help();
@@ -33,7 +33,7 @@ TEST_CASE("THelp: Usage", "[help]")
 
 TEST_CASE("THelp: UsageCallback", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.usage([]() { return "use: just use it"; });
 
     std::string help = app.help();
@@ -42,7 +42,7 @@ TEST_CASE("THelp: UsageCallback", "[help]")
 
 TEST_CASE("THelp: UsageCallbackBoth", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.usage([]() { return "use: just use it"; });
     app.usage("like 1, 2, and 3");
     std::string help = app.help();
@@ -53,7 +53,7 @@ TEST_CASE("THelp: UsageCallbackBoth", "[help]")
 
 TEST_CASE("THelp: Footer", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.footer("Report bugs to bugs@example.com");
 
     std::string help = app.help();
@@ -63,7 +63,7 @@ TEST_CASE("THelp: Footer", "[help]")
 
 TEST_CASE("THelp: FooterCallback", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.footer([]() { return "Report bugs to bugs@example.com"; });
 
     std::string help = app.help();
@@ -73,7 +73,7 @@ TEST_CASE("THelp: FooterCallback", "[help]")
 
 TEST_CASE("THelp: FooterCallbackBoth", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.footer([]() { return "Report bugs to bugs@example.com"; });
     app.footer(" foot!!!!");
     std::string help = app.help();
@@ -85,7 +85,7 @@ TEST_CASE("THelp: FooterCallbackBoth", "[help]")
 /// @brief from github issue #1156
 TEST_CASE("THelp: FooterOptionGroup", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.footer("Report bugs to bugs@example.com");
 
@@ -105,16 +105,16 @@ TEST_CASE("THelp: FooterOptionGroup", "[help]")
 /// @brief from github issue #1183
 TEST_CASE("THelp: FooterSubcommandHelpAll", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.footer("Report bugs to bugs@example.com");
     app.set_help_all_flag("--help-all", "All options of subcommands");
     app.add_subcommand("Subcommand1", "Desc1");
     app.add_subcommand("Subcommand2", "Desc2");
 
-    CHECK_THROWS_AS(app.parse("--help-all"), CLI::CallForAllHelp);
+    CHECK_THROWS_AS(app.parse("--help-all"), cli::call_for_all_help_t);
 
-    std::string help = app.help("", CLI::AppFormatMode::All);
+    std::string help = app.help("", cli::app_format_mode_t::all);
 
     auto footer_loc = help.find("bugs@example.com");
     auto footer_loc2 = help.find("bugs@example.com", footer_loc + 10);
@@ -125,13 +125,13 @@ TEST_CASE("THelp: FooterSubcommandHelpAll", "[help]")
 
 TEST_CASE("THelp: FooterSubcommandHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.footer("Report bugs to bugs@example.com");
     app.add_subcommand("Subcommand1", "Desc1");
     app.add_subcommand("Subcommand2", "Desc2");
 
-    CHECK_THROWS_AS(app.parse("Subcommand1 Subcommand2 --help"), CLI::CallForHelp);
+    CHECK_THROWS_AS(app.parse("Subcommand1 Subcommand2 --help"), cli::call_for_help_t);
 
     std::string help = app.help();
     auto footer_loc = help.find("bugs@example.com");
@@ -143,7 +143,7 @@ TEST_CASE("THelp: FooterSubcommandHelp", "[help]")
 
 TEST_CASE("THelp: Description", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::string x;
     app.add_option("--option", x, "option description BD");
 
@@ -155,7 +155,7 @@ TEST_CASE("THelp: Description", "[help]")
 
 TEST_CASE("THelp: OptionalPositional", "[help]")
 {
-    CLI::App app {"My prog", "program"};
+    cli::app_t app {"My prog", "program"};
 
     std::string x;
     app.add_option("something", x, "My option here");
@@ -171,7 +171,7 @@ TEST_CASE("THelp: OptionalPositional", "[help]")
 
 TEST_CASE("THelp: Hidden", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     app.add_option("something", x, "My option here")->group("");
@@ -188,7 +188,7 @@ TEST_CASE("THelp: Hidden", "[help]")
 
 TEST_CASE("THelp: deprecatedOptions", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     auto *soption = app.add_option("--something", x, "My option here");
@@ -196,7 +196,7 @@ TEST_CASE("THelp: deprecatedOptions", "[help]")
     std::string y;
     app.add_option("--another", y);
 
-    CLI::deprecate_option(soption, "something_else");
+    cli::deprecate_option(soption, "something_else");
 
     std::string help = app.help();
 
@@ -207,7 +207,7 @@ TEST_CASE("THelp: deprecatedOptions", "[help]")
 
 TEST_CASE("THelp: deprecatedOptions2", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     app.add_option("--something", x, "My option here");
@@ -215,7 +215,7 @@ TEST_CASE("THelp: deprecatedOptions2", "[help]")
     std::string y;
     app.add_option("--another", y);
 
-    CLI::deprecate_option(&app, "--something");
+    cli::deprecate_option(&app, "--something");
 
     std::string help = app.help();
 
@@ -226,7 +226,7 @@ TEST_CASE("THelp: deprecatedOptions2", "[help]")
 
 TEST_CASE("THelp: deprecatedOptions3", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.get_formatter()->right_column_width(100);
     std::string x;
     app.add_option("--something", x, "Some Description");
@@ -234,7 +234,7 @@ TEST_CASE("THelp: deprecatedOptions3", "[help]")
     std::string y;
     app.add_option("--another", y);
 
-    CLI::deprecate_option(app, "--something", "--something_else");
+    cli::deprecate_option(app, "--something", "--something_else");
 
     std::string help = app.help();
 
@@ -245,7 +245,7 @@ TEST_CASE("THelp: deprecatedOptions3", "[help]")
 
 TEST_CASE("THelp: retiredOptions", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     auto *opt1 = app.add_option("--something", x, "My option here");
@@ -253,7 +253,7 @@ TEST_CASE("THelp: retiredOptions", "[help]")
     std::string y;
     app.add_option("--another", y);
 
-    CLI::retire_option(app, opt1);
+    cli::retire_option(app, opt1);
 
     std::string help = app.help();
 
@@ -265,14 +265,14 @@ TEST_CASE("THelp: retiredOptions", "[help]")
 
 TEST_CASE("THelp: retiredOptions2", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     app.add_option("--something_else", x, "My option here");
     std::string y;
     app.add_option("--another", y);
 
-    CLI::retire_option(&app, "--something");
+    cli::retire_option(&app, "--something");
 
     std::string help = app.help();
 
@@ -283,7 +283,7 @@ TEST_CASE("THelp: retiredOptions2", "[help]")
 
 TEST_CASE("THelp: retiredOptions3", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::string x;
     app.add_option("--something", x, "My option here");
@@ -291,7 +291,7 @@ TEST_CASE("THelp: retiredOptions3", "[help]")
     std::string y;
     app.add_option("--another", y);
 
-    CLI::retire_option(app, "--something");
+    cli::retire_option(app, "--something");
 
     std::string help = app.help();
 
@@ -303,7 +303,7 @@ TEST_CASE("THelp: retiredOptions3", "[help]")
 
 TEST_CASE("THelp: HiddenGroup", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     // empty option group name should be hidden
     auto *hgroup = app.add_option_group("");
     std::string x;
@@ -329,7 +329,7 @@ TEST_CASE("THelp: HiddenGroup", "[help]")
 // from https://github.com/CLIUtils/CLI11/issues/1045
 TEST_CASE("THelp: multiple_group", "[help]")
 {
-    CLI::App app {"test_group"};
+    cli::app_t app {"test_group"};
     auto *group1 = app.add_option_group("outGroup");
     auto *group2 = app.add_option_group("inGroup");
 
@@ -360,7 +360,7 @@ TEST_CASE("THelp: multiple_group", "[help]")
 
 TEST_CASE("THelp: OptionalPositionalAndOptions", "[help]")
 {
-    CLI::App app {"My prog", "AnotherProgram"};
+    cli::app_t app {"My prog", "AnotherProgram"};
     app.add_flag("-q,--quick");
 
     std::string x;
@@ -373,7 +373,7 @@ TEST_CASE("THelp: OptionalPositionalAndOptions", "[help]")
 
 TEST_CASE("THelp: NonStandardOptions", "[help]")
 {
-    CLI::App app {"My prog", "nonstandard"};
+    cli::app_t app {"My prog", "nonstandard"};
     app.allow_non_standard_option_names();
     app.add_flag("-q,--quick");
     app.add_flag("-slow");
@@ -388,7 +388,7 @@ TEST_CASE("THelp: NonStandardOptions", "[help]")
 
 TEST_CASE("THelp: RequiredPositionalAndOptions", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.add_flag("-q,--quick");
 
     std::string x;
@@ -403,7 +403,7 @@ TEST_CASE("THelp: RequiredPositionalAndOptions", "[help]")
 
 TEST_CASE("THelp: MultiOpts", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::vector<int> x, y;
     app.add_option("-q,--quick", x, "Disc")->expected(2);
     app.add_option("-v,--vals", y, "Other");
@@ -419,7 +419,7 @@ TEST_CASE("THelp: MultiOpts", "[help]")
 
 TEST_CASE("THelp: VectorOpts", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::vector<int> x = {1, 2};
     app.add_option("-q,--quick", x)->capture_default_str();
 
@@ -431,7 +431,7 @@ TEST_CASE("THelp: VectorOpts", "[help]")
 
 TEST_CASE("THelp: MultiPosOpts", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.name("program");
     std::vector<int> x, y;
     app.add_option("quick", x, "Disc")->expected(2);
@@ -450,7 +450,7 @@ TEST_CASE("THelp: MultiPosOpts", "[help]")
 
 TEST_CASE("THelp: EnvName", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::string input;
     app.add_option("--something", input)->envname("SOME_ENV");
 
@@ -461,9 +461,9 @@ TEST_CASE("THelp: EnvName", "[help]")
 
 TEST_CASE("THelp: Needs", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *op1 = app.add_flag("--op1");
+    cli::option_t *op1 = app.add_flag("--op1");
     app.add_flag("--op2")->needs(op1);
 
     std::string help = app.help();
@@ -473,11 +473,11 @@ TEST_CASE("THelp: Needs", "[help]")
 
 TEST_CASE("THelp: NeedsPositional", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     int x {0}, y {0};
 
-    CLI::Option *op1 = app.add_option("op1", x, "one");
+    cli::option_t *op1 = app.add_option("op1", x, "one");
     app.add_option("op2", y, "two")->needs(op1);
 
     std::string help = app.help();
@@ -488,9 +488,9 @@ TEST_CASE("THelp: NeedsPositional", "[help]")
 
 TEST_CASE("THelp: Excludes", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *op1 = app.add_flag("--op1");
+    cli::option_t *op1 = app.add_flag("--op1");
     app.add_flag("--op2")->excludes(op1);
 
     std::string help = app.help();
@@ -500,11 +500,11 @@ TEST_CASE("THelp: Excludes", "[help]")
 
 TEST_CASE("THelp: ExcludesPositional", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     int x {0}, y {0};
 
-    CLI::Option *op1 = app.add_option("op1", x);
+    cli::option_t *op1 = app.add_option("op1", x);
     app.add_option("op2", y)->excludes(op1);
 
     std::string help = app.help();
@@ -515,9 +515,9 @@ TEST_CASE("THelp: ExcludesPositional", "[help]")
 
 TEST_CASE("THelp: ExcludesSymmetric", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *op1 = app.add_flag("--op1");
+    cli::option_t *op1 = app.add_flag("--op1");
     app.add_flag("--op2")->excludes(op1);
 
     std::string help = app.help();
@@ -527,10 +527,10 @@ TEST_CASE("THelp: ExcludesSymmetric", "[help]")
 
 TEST_CASE("THelp: NeedsSortedByName", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *option_b = app.add_flag("--optionB");
-    CLI::Option *option_a = app.add_flag("--optionA");
+    cli::option_t *option_b = app.add_flag("--optionB");
+    cli::option_t *option_a = app.add_flag("--optionA");
     app.add_flag("--target")->needs(option_b)->needs(option_a);
 
     std::string help = app.help();
@@ -540,10 +540,10 @@ TEST_CASE("THelp: NeedsSortedByName", "[help]")
 
 TEST_CASE("THelp: ExcludesSortedByName", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *option_b = app.add_flag("--optionB");
-    CLI::Option *option_a = app.add_flag("--optionA");
+    cli::option_t *option_b = app.add_flag("--optionB");
+    cli::option_t *option_a = app.add_flag("--optionA");
     app.add_flag("--target")->excludes(option_b)->excludes(option_a);
 
     std::string help = app.help();
@@ -554,11 +554,11 @@ TEST_CASE("THelp: ExcludesSortedByName", "[help]")
 TEST_CASE("THelp: ManualSetters", "[help]")
 {
 
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     int x {1};
 
-    CLI::Option *op1 = app.add_option("--op", x);
+    cli::option_t *op1 = app.add_option("--op", x);
     op1->default_str("12");
     op1->type_name("BIGGLES");
     CHECK(1 == x);
@@ -591,7 +591,7 @@ TEST_CASE("THelp: ManualSetters", "[help]")
 
 TEST_CASE("THelp: Subcom", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     auto *sub1 = app.add_subcommand("sub1");
     app.add_subcommand("sub2");
@@ -623,7 +623,7 @@ TEST_CASE("THelp: Subcom", "[help]")
 
 TEST_CASE("THelp: Subcom_alias", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     auto *sub1 = app.add_subcommand("sub1", "Subcommand1 description test");
     sub1->alias("sub_alias1");
@@ -639,7 +639,7 @@ TEST_CASE("THelp: Subcom_alias", "[help]")
 
 TEST_CASE("THelp: Subcom_alias_group", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     auto *sub1 = app.add_subcommand("", "Subcommand1 description test");
     sub1->alias("sub_alias1");
@@ -656,7 +656,7 @@ TEST_CASE("THelp: Subcom_alias_group", "[help]")
 // from https://github.com/CLIUtils/CLI11/issues/1269
 TEST_CASE("THelp: nested_subcommand", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     auto *sub1 = app.add_subcommand("sub1", "Subcommand1 description test");
     int opt1 = 0;
@@ -673,7 +673,7 @@ TEST_CASE("THelp: nested_subcommand", "[help]")
         app.parse("sub1 subc2 --help");
         CHECK(false);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         std::ostringstream eout;
         auto res = app.exit(e, eout);
@@ -686,7 +686,7 @@ TEST_CASE("THelp: nested_subcommand", "[help]")
 
 TEST_CASE("THelp: MasterName", "[help]")
 {
-    CLI::App app {"My prog", "MyRealName"};
+    cli::app_t app {"My prog", "MyRealName"};
 
     char x[] = "./myprogram"; // NOLINT(modernize-avoid-c-arrays)
 
@@ -702,12 +702,12 @@ TEST_CASE("THelp: MasterName", "[help]")
 TEST_CASE("THelp: ManualSetterOverFunction", "[help]")
 {
 
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     int x {1};
 
-    CLI::Option *op1 = app.add_option("--op1", x)->check(CLI::IsMember({1, 2}));
-    CLI::Option *op2 = app.add_option("--op2", x)->transform(CLI::IsMember({1, 2}));
+    cli::option_t *op1 = app.add_option("--op1", x)->check(cli::is_member_t({1, 2}));
+    cli::option_t *op2 = app.add_option("--op2", x)->transform(cli::is_member_t({1, 2}));
     op1->default_str("12");
     op1->type_name("BIGGLES");
     op2->type_name("QUIGGLES");
@@ -722,11 +722,11 @@ TEST_CASE("THelp: ManualSetterOverFunction", "[help]")
 
 TEST_CASE("THelp: IntDefaults", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     int one {1}, two {2};
     app.add_option("--one", one, "Help for one")->capture_default_str();
-    app.add_option("--set", two, "Help for set")->capture_default_str()->check(CLI::IsMember({2, 3, 4}));
+    app.add_option("--set", two, "Help for set")->capture_default_str()->check(cli::is_member_t({2, 3, 4}));
 
     std::string help = app.help();
 
@@ -739,11 +739,11 @@ TEST_CASE("THelp: IntDefaults", "[help]")
 
 TEST_CASE("THelp: SetLower", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.option_defaults()->always_capture_default();
 
     std::string def {"One"};
-    app.add_option("--set", def, "Help for set")->check(CLI::IsMember({"oNe", "twO", "THREE"}));
+    app.add_option("--set", def, "Help for set")->check(cli::is_member_t({"oNe", "twO", "THREE"}));
 
     std::string help = app.help();
 
@@ -758,51 +758,51 @@ TEST_CASE("THelp: SetLower", "[help]")
 
 TEST_CASE("THelp: OnlyOneHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     // It is not supported to have more than one help flag, last one wins
     app.set_help_flag("--help", "No short name allowed");
     app.set_help_flag("--yelp", "Alias for help");
 
     std::vector<std::string> input {"--help"};
-    CHECK_THROWS_AS(app.parse(input), CLI::ExtrasError);
+    CHECK_THROWS_AS(app.parse(input), cli::extras_error_t);
 }
 
 TEST_CASE("THelp: MultiHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     // It is not supported to have more than one help flag, last one wins
     app.set_help_flag("--help,-h,-?", "No short name allowed");
     app.allow_windows_style_options();
 
     std::vector<std::string> input {"/?"};
-    CHECK_THROWS_AS(app.parse(input), CLI::CallForHelp);
+    CHECK_THROWS_AS(app.parse(input), cli::call_for_help_t);
 }
 
 TEST_CASE("THelp: OnlyOneAllHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     // It is not supported to have more than one help flag, last one wins
     app.set_help_all_flag("--help-all", "No short name allowed");
     app.set_help_all_flag("--yelp", "Alias for help");
 
     std::vector<std::string> input {"--help-all"};
-    CHECK_THROWS_AS(app.parse(input), CLI::ExtrasError);
+    CHECK_THROWS_AS(app.parse(input), cli::extras_error_t);
 
     std::vector<std::string> input2 {"--yelp"};
-    CHECK_THROWS_AS(app.parse(input2), CLI::CallForAllHelp);
+    CHECK_THROWS_AS(app.parse(input2), cli::call_for_all_help_t);
 
     // Remove the flag
     app.set_help_all_flag();
     std::vector<std::string> input3 {"--yelp"};
-    CHECK_THROWS_AS(app.parse(input3), CLI::ExtrasError);
+    CHECK_THROWS_AS(app.parse(input3), cli::extras_error_t);
 }
 
 TEST_CASE("THelp: RemoveHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.set_help_flag();
 
     std::string help = app.help();
@@ -817,18 +817,18 @@ TEST_CASE("THelp: RemoveHelp", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::ExtrasError));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::extras_error));
     }
 }
 
 TEST_CASE("THelp: RemoveOtherMethodHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     // Don't do this. Just in case, let's make sure it works.
-    app.remove_option(const_cast<CLI::Option *>(app.get_help_ptr()));
+    app.remove_option(const_cast<cli::option_t *>(app.get_help_ptr()));
 
     std::string help = app.help();
 
@@ -842,19 +842,19 @@ TEST_CASE("THelp: RemoveOtherMethodHelp", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::ExtrasError));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::extras_error));
     }
 }
 
 TEST_CASE("THelp: RemoveOtherMethodHelpAll", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.set_help_all_flag("--help-all");
     // Don't do this. Just in case, let's make sure it works.
-    app.remove_option(const_cast<CLI::Option *>(app.get_help_all_ptr()));
+    app.remove_option(const_cast<cli::option_t *>(app.get_help_all_ptr()));
 
     std::string help = app.help();
 
@@ -868,15 +868,15 @@ TEST_CASE("THelp: RemoveOtherMethodHelpAll", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::ExtrasError));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::extras_error));
     }
 }
 
 TEST_CASE("THelp: NoHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.set_help_flag();
 
     std::string help = app.help();
@@ -891,17 +891,17 @@ TEST_CASE("THelp: NoHelp", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::ExtrasError));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::extras_error));
     }
 }
 
 TEST_CASE("THelp: CustomHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    CLI::Option *help_option = app.set_help_flag("--yelp", "display help and exit");
+    cli::option_t *help_option = app.set_help_flag("--yelp", "display help and exit");
     CHECK(help_option == app.get_help_ptr());
 
     std::string help = app.help();
@@ -917,15 +917,15 @@ TEST_CASE("THelp: CustomHelp", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::CallForHelp &e)
+    catch (const cli::call_for_help_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::Success));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::success));
     }
 }
 
 TEST_CASE("THelp: HelpSubcommandPriority", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.set_help_flag("-h", "display help and exit");
 
@@ -933,16 +933,16 @@ TEST_CASE("THelp: HelpSubcommandPriority", "[help]")
     std::string someFile = "";
 
     put_env("SOME_FILE", "NOT_A_FILE");
-    sub1->add_option("-f,--file", someFile)->envname("SOME_FILE")->required()->expected(1)->check(CLI::ExistingFile);
+    sub1->add_option("-f,--file", someFile)->envname("SOME_FILE")->required()->expected(1)->check(cli::existing_file);
 
     std::string input {"sub1 -h"};
-    CHECK_THROWS_AS(app.parse(input), CLI::CallForHelp);
+    CHECK_THROWS_AS(app.parse(input), cli::call_for_help_t);
     unset_env("SOME_FILE");
 }
 
 TEST_CASE("THelp: NextLineShouldBeAlignmentInMultilineDescription", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     int i {0};
     const std::string first {"first line"};
     const std::string second {"second line"};
@@ -961,7 +961,7 @@ TEST_CASE("THelp: NextLineShouldBeAlignmentInMultilineDescription", "[help]")
 
 TEST_CASE("THelp: CheckRightWidth", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     int i {0};
     const std::string first {"first line"};
     const std::string second {"second line"};
@@ -984,7 +984,7 @@ static const std::string long_string {
 
 TEST_CASE("THelp: longLineAlignment", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     int i {0};
 
     app.add_option("-i,--int,--int_very_long_option_name_that_just_keeps_going_on_and_on_and_on_and_on_and_on_possibly_"
@@ -1010,7 +1010,7 @@ TEST_CASE("THelp: longLineAlignment", "[help]")
 
 TEST_CASE("THelp: longPositional", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     int i {0};
 
     app.add_option("int_very_long_option_name_that_just_keeps_going_on_and_on_and_on_and_on_and_on_possibly_"
@@ -1031,7 +1031,7 @@ TEST_CASE("THelp: SubcommandNewLineDescription", "[help]")
 
     const std::string nl_description {"this is a description with aX \n X\\n in it and just for fun \n\t another"};
 
-    CLI::App app;
+    cli::app_t app;
     int i {0};
     app.add_option("-i,--int", i);
     app.add_subcommand("subcom1", nl_description);
@@ -1046,7 +1046,7 @@ TEST_CASE("THelp: SubcommandNewLineDescription", "[help]")
 TEST_CASE("THelp: longDescription", "[help]")
 {
 
-    CLI::App app(long_string, "long_desc");
+    cli::app_t app(long_string, "long_desc");
     int i {0};
 
     app.add_option("-i,--int", i);
@@ -1070,7 +1070,7 @@ TEST_CASE("THelp: longDescription", "[help]")
 TEST_CASE("THelp: longSubcommandDescription", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
     int i {0};
 
     app.add_option("-i,--int", i);
@@ -1093,13 +1093,13 @@ TEST_CASE("THelp: longSubcommandDescription", "[help]")
 TEST_CASE("THelp: longSubcommandDescriptionExpanded", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
     int i {0};
 
     app.add_option("-i,--int", i);
     app.add_subcommand("test1", long_string);
 
-    auto help = app.help("", CLI::AppFormatMode::All);
+    auto help = app.help("", cli::app_format_mode_t::all);
     auto width = app.get_formatter()->get_description_paragraph_width();
     auto first_loc = help.find("AAARG");
     auto first_new_line = help.find_first_of('\n', first_loc);
@@ -1109,7 +1109,7 @@ TEST_CASE("THelp: longSubcommandDescriptionExpanded", "[help]")
 
 TEST_CASE("THelp: longFooter", "[help]")
 {
-    CLI::App app("test long footer", "long_desc");
+    cli::app_t app("test long footer", "long_desc");
     int i {0};
     app.footer(long_string);
     app.add_option("-i,--int", i);
@@ -1132,7 +1132,7 @@ TEST_CASE("THelp: longFooter", "[help]")
 
 TEST_CASE("THelp: NiceName", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     int x {0};
     auto *long_name = app.add_option("-s,--long,-q,--other,that", x);
@@ -1146,22 +1146,22 @@ TEST_CASE("THelp: NiceName", "[help]")
 
 TEST_CASE("Exit: ErrorWithHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::vector<std::string> input {"-h"};
     try
     {
         app.parse(input);
     }
-    catch (const CLI::CallForHelp &e)
+    catch (const cli::call_for_help_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::Success));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::success));
     }
 }
 
 TEST_CASE("Exit: ErrorWithAllHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.set_help_all_flag("--help-all", "All help");
 
     std::vector<std::string> input {"--help-all"};
@@ -1169,46 +1169,46 @@ TEST_CASE("Exit: ErrorWithAllHelp", "[help]")
     {
         app.parse(input);
     }
-    catch (const CLI::CallForAllHelp &e)
+    catch (const cli::call_for_all_help_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::Success));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::success));
     }
 }
 
 TEST_CASE("Exit: ErrorWithoutHelp", "[help]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     std::vector<std::string> input {"--none"};
     try
     {
         app.parse(input);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
-        CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::ExtrasError));
+        CHECK(e.get_exit_code() == static_cast<int>(cli::exit_codes_t::extras_error));
     }
 }
 
 TEST_CASE("Exit: ExitCodes", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
-    auto i = static_cast<int>(CLI::ExitCodes::ExtrasError);
-    CHECK(app.exit(CLI::Success()) == 0);
-    CHECK(app.exit(CLI::CallForHelp()) == 0);
-    CHECK(app.exit(CLI::ExtrasError({"Thing"})) == i);
-    CHECK(app.exit(CLI::RuntimeError(42)) == 42);
-    CHECK(app.exit(CLI::RuntimeError()) == 1);
+    auto i = static_cast<int>(cli::exit_codes_t::extras_error);
+    CHECK(app.exit(cli::success_t()) == 0);
+    CHECK(app.exit(cli::call_for_help_t()) == 0);
+    CHECK(app.exit(cli::extras_error_t({"Thing"})) == i);
+    CHECK(app.exit(cli::runtime_error_t(42)) == 42);
+    CHECK(app.exit(cli::runtime_error_t()) == 1);
 }
 
 struct CapturedHelp
 {
-        CLI::App app {"My Test Program"};
+        cli::app_t app {"My Test Program"};
         std::stringstream out {};
         std::stringstream err {};
 
-        int run(const CLI::Error &e)
+        int run(const cli::error_t &e)
         {
             return app.exit(e, out, err);
         }
@@ -1222,39 +1222,39 @@ struct CapturedHelp
 
 TEST_CASE_METHOD(CapturedHelp, "Successful", "[help]")
 {
-    CHECK(0 == run(CLI::Success()));
+    CHECK(0 == run(cli::success_t()));
     CHECK(out.str().empty());
     CHECK(err.str().empty());
 }
 
 TEST_CASE_METHOD(CapturedHelp, "JustAnError", "[help]")
 {
-    CHECK(42 == run(CLI::RuntimeError(42)));
+    CHECK(42 == run(cli::runtime_error_t(42)));
     CHECK(out.str().empty());
     CHECK(err.str().empty());
 }
 
 TEST_CASE_METHOD(CapturedHelp, "CallForHelp", "[help]")
 {
-    CHECK(0 == run(CLI::CallForHelp()));
+    CHECK(0 == run(cli::call_for_help_t()));
     CHECK(app.help() == out.str());
     CHECK(err.str().empty());
 }
 TEST_CASE_METHOD(CapturedHelp, "CallForAllHelp", "[help]")
 {
-    CHECK(0 == run(CLI::CallForAllHelp()));
-    CHECK(app.help("", CLI::AppFormatMode::All) == out.str());
+    CHECK(0 == run(cli::call_for_all_help_t()));
+    CHECK(app.help("", cli::app_format_mode_t::all) == out.str());
     CHECK(err.str().empty());
 }
 TEST_CASE_METHOD(CapturedHelp, "CallForAllHelpOutput", "[help]")
 {
     app.set_help_all_flag("--help-all", "Help all");
     app.add_subcommand("one", "One description");
-    CLI::App *sub = app.add_subcommand("two");
+    cli::app_t *sub = app.add_subcommand("two");
     sub->add_flag("--three");
 
-    CHECK(0 == run(CLI::CallForAllHelp()));
-    CHECK(app.help("", CLI::AppFormatMode::All) == out.str());
+    CHECK(0 == run(cli::call_for_all_help_t()));
+    CHECK(app.help("", cli::app_format_mode_t::all) == out.str());
     CHECK(err.str().empty());
     CHECK_THAT(out.str(), Contains("one"));
     CHECK_THAT(out.str(), Contains("two"));
@@ -1265,15 +1265,15 @@ TEST_CASE_METHOD(CapturedHelp, "CallForAllHelpOutput", "[help]")
 }
 TEST_CASE_METHOD(CapturedHelp, "NewFormattedHelp", "[help]")
 {
-    app.formatter_fn([](const CLI::App *, std::string, CLI::AppFormatMode) { return "New Help"; });
-    CHECK(0 == run(CLI::CallForHelp()));
+    app.formatter_fn([](const cli::app_t *, std::string, cli::app_format_mode_t) { return "New Help"; });
+    CHECK(0 == run(cli::call_for_help_t()));
     CHECK("New Help" == out.str());
     CHECK(err.str().empty());
 }
 
 TEST_CASE_METHOD(CapturedHelp, "NormalError", "[help]")
 {
-    CHECK(static_cast<int>(CLI::ExitCodes::ExtrasError) == run(CLI::ExtrasError({"Thing"})));
+    CHECK(static_cast<int>(cli::exit_codes_t::extras_error) == run(cli::extras_error_t({"Thing"})));
     CHECK(out.str().empty());
     CHECK_THAT(err.str(), Contains("for more information"));
     CHECK_THAT(err.str(), !Contains("ExtrasError"));
@@ -1285,7 +1285,7 @@ TEST_CASE_METHOD(CapturedHelp, "NormalError", "[help]")
 TEST_CASE_METHOD(CapturedHelp, "DoubleError", "[help]")
 {
     app.set_help_all_flag("--help-all");
-    CHECK(static_cast<int>(CLI::ExitCodes::ExtrasError) == run(CLI::ExtrasError({"Thing"})));
+    CHECK(static_cast<int>(cli::exit_codes_t::extras_error) == run(cli::extras_error_t({"Thing"})));
     CHECK(out.str().empty());
     CHECK_THAT(err.str(), Contains("for more information"));
     CHECK_THAT(err.str(), Contains(" --help "));
@@ -1300,7 +1300,7 @@ TEST_CASE_METHOD(CapturedHelp, "AllOnlyError", "[help]")
 {
     app.set_help_all_flag("--help-all");
     app.set_help_flag();
-    CHECK(static_cast<int>(CLI::ExitCodes::ExtrasError) == run(CLI::ExtrasError({"Thing"})));
+    CHECK(static_cast<int>(cli::exit_codes_t::extras_error) == run(cli::extras_error_t({"Thing"})));
     CHECK(out.str().empty());
     CHECK_THAT(err.str(), Contains("for more information"));
     CHECK_THAT(err.str(), !Contains(" --help "));
@@ -1313,12 +1313,12 @@ TEST_CASE_METHOD(CapturedHelp, "AllOnlyError", "[help]")
 
 TEST_CASE_METHOD(CapturedHelp, "ReplacedError", "[help]")
 {
-    app.failure_message(CLI::FailureMessage::help);
+    app.failure_message(cli::failure_message::help);
 
-    CHECK(static_cast<int>(CLI::ExitCodes::ExtrasError) == run(CLI::ExtrasError({"Thing"})));
+    CHECK(static_cast<int>(cli::exit_codes_t::extras_error) == run(cli::extras_error_t({"Thing"})));
     CHECK(out.str().empty());
     CHECK_THAT(err.str(), !Contains("for more information"));
-    CHECK_THAT(err.str(), Contains("ERROR: ExtrasError"));
+    CHECK_THAT(err.str(), Contains("extras_error"));
     CHECK_THAT(err.str(), Contains("Thing"));
     CHECK_THAT(err.str(), Contains("Usage"));
 }
@@ -1329,9 +1329,9 @@ TEST_CASE("THelp: CustomDoubleOption", "[help]")
 
     std::pair<int, double> custom_opt;
 
-    CLI::App app;
+    cli::app_t app;
 
-    auto *opt = app.add_option("posit", [&custom_opt](CLI::results_t vals) {
+    auto *opt = app.add_option("posit", [&custom_opt](cli::results_t vals) {
         custom_opt = {stol(vals.at(0)), stod(vals.at(1))};
         return true;
     });
@@ -1342,7 +1342,7 @@ TEST_CASE("THelp: CustomDoubleOption", "[help]")
 
 TEST_CASE("THelp: CheckEmptyTypeName", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     auto *opt = app.add_flag("-f,--flag");
     std::string name = opt->get_type_name();
@@ -1351,7 +1351,7 @@ TEST_CASE("THelp: CheckEmptyTypeName", "[help]")
 
 TEST_CASE("THelp: FlagDefaults", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     app.add_flag("-t,--not{false}")->default_str("false");
     auto str = app.help();
@@ -1360,14 +1360,14 @@ TEST_CASE("THelp: FlagDefaults", "[help]")
 
 TEST_CASE("THelp: AccessDescription", "[help]")
 {
-    CLI::App app {"My description goes here"};
+    cli::app_t app {"My description goes here"};
 
     CHECK("My description goes here" == app.get_description());
 }
 
 TEST_CASE("THelp: SetDescriptionAfterCreation", "[help]")
 {
-    CLI::App app {""};
+    cli::app_t app {""};
 
     app.description("My description goes here");
 
@@ -1377,7 +1377,7 @@ TEST_CASE("THelp: SetDescriptionAfterCreation", "[help]")
 
 TEST_CASE("THelp: AccessOptionDescription", "[help]")
 {
-    CLI::App app {};
+    cli::app_t app {};
 
     int x {0};
     auto *opt = app.add_option("-a,--alpha", x, "My description goes here");
@@ -1387,7 +1387,7 @@ TEST_CASE("THelp: AccessOptionDescription", "[help]")
 
 TEST_CASE("THelp: SetOptionDescriptionAfterCreation", "[help]")
 {
-    CLI::App app {};
+    cli::app_t app {};
 
     int x {0};
     auto *opt = app.add_option("-a,--alpha", x);
@@ -1399,7 +1399,7 @@ TEST_CASE("THelp: SetOptionDescriptionAfterCreation", "[help]")
 
 TEST_CASE("THelp: CleanNeeds", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     int x {0};
     auto *a_name = app.add_option("-a,--alpha", x);
@@ -1412,7 +1412,7 @@ TEST_CASE("THelp: CleanNeeds", "[help]")
 
 TEST_CASE("THelp: RequiredPrintout", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     int x {0};
     app.add_option("-a,--alpha", x)->required();
@@ -1422,7 +1422,7 @@ TEST_CASE("THelp: RequiredPrintout", "[help]")
 
 TEST_CASE("THelp: GroupOrder", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     app.add_flag("--one")->group("zee");
     app.add_flag("--two")->group("aee");
@@ -1439,25 +1439,25 @@ TEST_CASE("THelp: GroupOrder", "[help]")
 
 TEST_CASE("THelp: GroupNameError", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     auto *f1 = app.add_flag("--one");
     auto *f2 = app.add_flag("--two");
 
-    CHECK_THROWS_AS(f1->group("evil group name\non two lines"), CLI::IncorrectConstruction);
-    CHECK_THROWS_AS(f2->group(std::string(5, '\0')), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(f1->group("evil group name\non two lines"), cli::incorrect_construction_t);
+    CHECK_THROWS_AS(f2->group(std::string(5, '\0')), cli::incorrect_construction_t);
 }
 
 TEST_CASE("THelp: ValidatorsText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
     int x {0};
     unsigned int y {0};
-    app.add_option("--f1", filename)->check(CLI::ExistingFile);
-    app.add_option("--f3", x)->check(CLI::Range(1, 4));
-    app.add_option("--f4", y)->check(CLI::Range(12));
+    app.add_option("--f1", filename)->check(cli::existing_file);
+    app.add_option("--f3", x)->check(cli::range_t(1, 4));
+    app.add_option("--f4", y)->check(cli::range_t(12));
 
     std::string help = app.help();
     CHECK_THAT(help, Contains("TEXT:FILE"));
@@ -1467,10 +1467,10 @@ TEST_CASE("THelp: ValidatorsText", "[help]")
 
 TEST_CASE("THelp: ValidatorsTextCustom", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f1", filename)->check(CLI::ExistingFile.description("Existing file"));
+    app.add_option("--f1", filename)->check(cli::existing_file.description("Existing file"));
 
     std::string help = app.help();
     CHECK_THAT(help, Contains("Existing file"));
@@ -1478,10 +1478,10 @@ TEST_CASE("THelp: ValidatorsTextCustom", "[help]")
 
 TEST_CASE("THelp: ValidatorsNonPathText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f2", filename)->check(CLI::NonexistentPath);
+    app.add_option("--f2", filename)->check(cli::nonexistent_path);
 
     std::string help = app.help();
     CHECK_THAT(help, Contains("TEXT:PATH"));
@@ -1489,10 +1489,10 @@ TEST_CASE("THelp: ValidatorsNonPathText", "[help]")
 
 TEST_CASE("THelp: ValidatorsDirText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f2", filename)->check(CLI::ExistingDirectory);
+    app.add_option("--f2", filename)->check(cli::existing_directory);
 
     std::string help = app.help();
     CHECK_THAT(help, Contains("TEXT:DIR"));
@@ -1500,10 +1500,10 @@ TEST_CASE("THelp: ValidatorsDirText", "[help]")
 
 TEST_CASE("THelp: ValidatorsPathText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f2", filename)->check(CLI::ExistingPath);
+    app.add_option("--f2", filename)->check(cli::existing_path);
 
     std::string help = app.help();
     CHECK_THAT(help, Contains("TEXT:PATH"));
@@ -1511,10 +1511,10 @@ TEST_CASE("THelp: ValidatorsPathText", "[help]")
 
 TEST_CASE("THelp: CombinedValidatorsText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f1", filename)->check(CLI::ExistingFile | CLI::ExistingDirectory);
+    app.add_option("--f1", filename)->check(cli::existing_file | cli::existing_directory);
 
     // This would be nice if it put something other than string, but would it be path or file?
     // Can't programmatically tell!
@@ -1527,10 +1527,10 @@ TEST_CASE("THelp: CombinedValidatorsText", "[help]")
 // Don't do this in real life, please
 TEST_CASE("THelp: CombinedValidatorsPathyText", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f1", filename)->check(CLI::ExistingPath | CLI::NonexistentPath);
+    app.add_option("--f1", filename)->check(cli::existing_path | cli::nonexistent_path);
 
     // Combining validators with the same type string is OK
     std::string help = app.help();
@@ -1541,10 +1541,10 @@ TEST_CASE("THelp: CombinedValidatorsPathyText", "[help]")
 // Don't do this in real life, please (and transform does nothing here)
 TEST_CASE("THelp: CombinedValidatorsPathyTextAsTransform", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::string filename;
-    app.add_option("--f1", filename)->transform(CLI::ExistingPath | CLI::NonexistentPath);
+    app.add_option("--f1", filename)->transform(cli::existing_path | cli::nonexistent_path);
 
     // Combining validators with the same type string is OK
     std::string help = app.help();
@@ -1557,11 +1557,11 @@ TEST_CASE("THelp: CombinedValidatorsPathyTextAsTransform", "[help]")
 // #113 Part 2
 TEST_CASE("THelp: ChangingSet", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::set<int> vals {1, 2, 3};
     int val {0};
-    app.add_option("--val", val)->check(CLI::IsMember(&vals));
+    app.add_option("--val", val)->check(cli::is_member_t(&vals));
 
     std::string help = app.help();
 
@@ -1579,11 +1579,11 @@ TEST_CASE("THelp: ChangingSet", "[help]")
 
 TEST_CASE("THelp: ChangingSetDefaulted", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::set<int> vals {1, 2, 3};
     int val {2};
-    app.add_option("--val", val, "")->check(CLI::IsMember(&vals))->capture_default_str();
+    app.add_option("--val", val, "")->check(cli::is_member_t(&vals))->capture_default_str();
 
     std::string help = app.help();
 
@@ -1601,11 +1601,11 @@ TEST_CASE("THelp: ChangingSetDefaulted", "[help]")
 
 TEST_CASE("THelp: ChangingCaselessSet", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
 
     std::set<std::string> vals {"1", "2", "3"};
     std::string val;
-    app.add_option("--val", val)->check(CLI::IsMember(&vals, CLI::ignore_case));
+    app.add_option("--val", val)->check(cli::is_member_t(&vals, cli::ignore_case));
 
     std::string help = app.help();
 
@@ -1623,12 +1623,12 @@ TEST_CASE("THelp: ChangingCaselessSet", "[help]")
 
 TEST_CASE("THelp: ChangingCaselessSetDefaulted", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     app.option_defaults()->always_capture_default();
 
     std::set<std::string> vals {"1", "2", "3"};
     std::string val = "2";
-    app.add_option("--val", val)->check(CLI::IsMember(&vals, CLI::ignore_case));
+    app.add_option("--val", val)->check(cli::is_member_t(&vals, cli::ignore_case));
 
     std::string help = app.help();
 
@@ -1651,10 +1651,10 @@ TEST_CASE("THelp: ChangingCaselessSetDefaulted", "[help]")
 TEST_CASE("THelp: ChangingDefaults", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
 
     std::vector<int> x = {1, 2};
-    CLI::Option *opt = app.add_option("-q,--quick", x);
+    cli::option_t *opt = app.add_option("-q,--quick", x);
     x = {3, 4};
     CHECK(x[0] == 3);
 
@@ -1672,7 +1672,7 @@ TEST_CASE("THelp: ChangingDefaults", "[help]")
 TEST_CASE("THelp: ChangingDefaultsWithAutoCapture", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
     app.option_defaults()->always_capture_default();
 
     std::vector<int> x = {1, 2};
@@ -1689,9 +1689,9 @@ TEST_CASE("THelp: ChangingDefaultsWithAutoCapture", "[help]")
 
 TEST_CASE("THelp: FunctionDefaultString", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     std::vector<int> x = {1, 2};
-    CLI::Option *opt = app.add_option("-q,--quick", x);
+    cli::option_t *opt = app.add_option("-q,--quick", x);
     opt->default_function([]() { return std::string("Powerful"); });
     opt->capture_default_str();
     std::string help = app.help();
@@ -1699,8 +1699,8 @@ TEST_CASE("THelp: FunctionDefaultString", "[help]")
 }
 TEST_CASE("TVersion: simple_flag", "[help]")
 {
-    CLI::App app;
-    app.set_version_flag("-v,--version", std::string("VERSION ") + CLI::version);
+    cli::app_t app;
+    app.set_version_flag("-v,--version", std::string("VERSION ") + cli::version);
     auto vers = app.version();
     CHECK_THAT(vers, Contains("VERSION"));
     app.set_version_flag();
@@ -1708,21 +1708,21 @@ TEST_CASE("TVersion: simple_flag", "[help]")
 }
 TEST_CASE("TVersion: callback_flag", "[help]")
 {
-    CLI::App app;
-    app.set_version_flag("-v,--version", []() { return std::string("VERSION ") + CLI::version; });
+    cli::app_t app;
+    app.set_version_flag("-v,--version", []() { return std::string("VERSION ") + cli::version; });
     auto vers = app.version();
     CHECK_THAT(vers, Contains("VERSION"));
-    app.set_version_flag("-v", []() { return std::string("VERSION2 ") + CLI::version; });
+    app.set_version_flag("-v", []() { return std::string("VERSION2 ") + cli::version; });
     vers = app.version();
     CHECK_THAT(vers, Contains("VERSION"));
 }
 TEST_CASE("TVersion: help", "[help]")
 {
-    CLI::App app;
+    cli::app_t app;
     app.set_version_flag("-v,--version", "version_string", "help_for_version");
     auto hvers = app.help();
     CHECK_THAT(hvers, Contains("help_for_version"));
-    app.set_version_flag("-v", []() { return std::string("VERSION2 ") + CLI::version; }, "help_for_version2");
+    app.set_version_flag("-v", []() { return std::string("VERSION2 ") + cli::version; }, "help_for_version2");
     hvers = app.help();
     CHECK_THAT(hvers, Contains("help_for_version2"));
 }
@@ -1730,12 +1730,12 @@ TEST_CASE("TVersion: help", "[help]")
 TEST_CASE("TVersion: parse_throw", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
 
-    app.set_version_flag("--version", CLI::version);
+    app.set_version_flag("--version", std::string{cli::version});
 
-    CHECK_THROWS_AS(app.parse("--version"), CLI::CallForVersion);
-    CHECK_THROWS_AS(app.parse("--version --arg2 5"), CLI::CallForVersion);
+    CHECK_THROWS_AS(app.parse("--version"), cli::call_for_version_t);
+    CHECK_THROWS_AS(app.parse("--version --arg2 5"), cli::call_for_version_t);
 
     auto *ptr = app.get_version_ptr();
 
@@ -1744,9 +1744,9 @@ TEST_CASE("TVersion: parse_throw", "[help]")
     {
         app.parse("--Version");
     }
-    catch (const CLI::CallForVersion &v)
+    catch (const cli::call_for_version_t &v)
     {
-        CHECK_THAT(CLI::version, Equals(v.what()));
+        CHECK(v.what() == cli::version);
         CHECK(0 == v.get_exit_code());
         const auto &appc = app;
         const auto *cptr = appc.get_version_ptr();
@@ -1757,19 +1757,19 @@ TEST_CASE("TVersion: parse_throw", "[help]")
 TEST_CASE("TVersion: exit", "[help]")
 {
 
-    CLI::App app;
+    cli::app_t app;
 
-    app.set_version_flag("--version", CLI::version);
+    app.set_version_flag("--version", std::string{cli::version});
 
     try
     {
         app.parse("--version");
     }
-    catch (const CLI::CallForVersion &v)
+    catch (const cli::call_for_version_t &v)
     {
         std::ostringstream out;
         auto ret = app.exit(v, out);
-        CHECK_THAT(out.str(), Contains(CLI::version));
+        CHECK_THAT(out.str(), Contains(cli::version));
         CHECK(0 == ret);
     }
 }
@@ -1777,20 +1777,20 @@ TEST_CASE("TVersion: exit", "[help]")
 TEST_CASE("TVersion: exit_with_required", "[help]")
 {
     // test that the version flag works even if there are required options
-    CLI::App app;
+    cli::app_t app;
 
-    app.set_version_flag("--version", CLI::version);
+    app.set_version_flag("--version", std::string{cli::version});
     app.add_option("--req")->required();
 
     try
     {
         app.parse("--version");
     }
-    catch (const CLI::CallForVersion &v)
+    catch (const cli::call_for_version_t &v)
     {
         std::ostringstream out;
         auto ret = app.exit(v, out);
-        CHECK_THAT(out.str(), Contains(CLI::version));
+        CHECK_THAT(out.str(), Contains(cli::version));
         CHECK(0 == ret);
     }
 }

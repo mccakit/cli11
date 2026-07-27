@@ -10,7 +10,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app {"App to demonstrate exclusionary option groups."};
+    cli::app_t app {"App to demonstrate exclusionary option groups."};
 
     std::vector<int> range;
     app.add_option("--range,-R", range, "A range")->expected(-2);
@@ -27,7 +27,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

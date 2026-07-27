@@ -70,7 +70,7 @@ TEST_CASE_METHOD(TApp, "atomic_bool_flags", "[optiontype]")
     std::atomic<int> iflag {0};
 
     app.add_flag("-b", bflag);
-    app.add_flag("-i,--int", iflag)->multi_option_policy(CLI::MultiOptionPolicy::Sum);
+    app.add_flag("-i,--int", iflag)->multi_option_policy(cli::multi_option_policy_t::sum);
 
     args = {"-b", "-i"};
     run();
@@ -88,7 +88,7 @@ TEST_CASE_METHOD(TApp, "atomic_bool_flags", "[optiontype]")
     CHECK(!bflag.load());
     CHECK(iflag.load() == 3);
     args = {"--int=notanumber"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "BoolOption", "[optiontype]")
@@ -131,7 +131,7 @@ TEST_CASE_METHOD(TApp, "atomic_int_option", "[optiontype]")
     CHECK(4.0 == app["--int"]->as<double>());
 
     args = {"--int", "notAnInt"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     aopt->expected(0, 1);
     args = {"--int"};
@@ -199,10 +199,10 @@ TEST_CASE_METHOD(TApp, "CallbackBoolFlags", "[optiontype]")
     run();
     CHECK(!value);
 
-    CHECK_THROWS_AS(app.add_flag_callback("hi", func), CLI::IncorrectConstruction);
-    cback->multi_option_policy(CLI::MultiOptionPolicy::Throw);
+    CHECK_THROWS_AS(app.add_flag_callback("hi", func), cli::incorrect_construction_t);
+    cback->multi_option_policy(cli::multi_option_policy_t::reject);
     args = {"--val", "--val=false"};
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 }
 
 TEST_CASE_METHOD(TApp, "pair_check", "[optiontype]")
@@ -211,12 +211,12 @@ TEST_CASE_METHOD(TApp, "pair_check", "[optiontype]")
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
 
-    CHECK(CLI::ExistingFile(myfile).empty());
+    CHECK(cli::existing_file(myfile).empty());
     std::pair<std::string, int> findex;
 
-    auto v0 = CLI::ExistingFile;
+    auto v0 = cli::existing_file;
     v0.application_index(0);
-    auto v1 = CLI::PositiveNumber;
+    auto v1 = cli::positive_number;
     v1.application_index(1);
     app.add_option("--file", findex)->check(v0)->check(v1);
 
@@ -229,11 +229,11 @@ TEST_CASE_METHOD(TApp, "pair_check", "[optiontype]")
 
     args = {"--file", myfile, "-3"};
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"--file", myfile, "2"};
     std::remove(myfile.c_str());
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "pair_check_string", "[optiontype]")
@@ -242,12 +242,12 @@ TEST_CASE_METHOD(TApp, "pair_check_string", "[optiontype]")
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
 
-    CHECK(CLI::ExistingFile(myfile).empty());
+    CHECK(cli::existing_file(myfile).empty());
     std::pair<std::string, std::string> findex;
 
-    auto v0 = CLI::ExistingFile;
+    auto v0 = cli::existing_file;
     v0.application_index(0);
-    auto v1 = CLI::PositiveNumber;
+    auto v1 = cli::positive_number;
     v1.application_index(1);
     app.add_option("--file", findex)->check(v0)->check(v1);
 
@@ -260,11 +260,11 @@ TEST_CASE_METHOD(TApp, "pair_check_string", "[optiontype]")
 
     args = {"--file", myfile, "-3"};
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"--file", myfile, "2"};
     std::remove(myfile.c_str());
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "pair_check_take_first", "[optiontype]")
@@ -273,14 +273,14 @@ TEST_CASE_METHOD(TApp, "pair_check_take_first", "[optiontype]")
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a')); // create file
     CHECK(ok);
 
-    CHECK(CLI::ExistingFile(myfile).empty());
+    CHECK(cli::existing_file(myfile).empty());
     std::pair<std::string, int> findex;
 
-    auto *opt = app.add_option("--file", findex)->check(CLI::ExistingFile)->check(CLI::PositiveNumber);
-    CHECK_THROWS_AS(opt->get_validator(3), CLI::OptionNotFound);
+    auto *opt = app.add_option("--file", findex)->check(cli::existing_file)->check(cli::positive_number);
+    CHECK_THROWS_AS(opt->get_validator(3), cli::option_not_found_t);
     opt->get_validator(0)->application_index(0);
     opt->get_validator(1)->application_index(1);
-    opt->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    opt->multi_option_policy(cli::multi_option_policy_t::take_last);
     args = {"--file", "not_a_file.txt", "-16", "--file", myfile, "2"};
     // should only check the last one
     CHECK_NOTHROW(run());
@@ -288,9 +288,9 @@ TEST_CASE_METHOD(TApp, "pair_check_take_first", "[optiontype]")
     CHECK(myfile == findex.first);
     CHECK(2 == findex.second);
 
-    opt->multi_option_policy(CLI::MultiOptionPolicy::TakeFirst);
+    opt->multi_option_policy(cli::multi_option_policy_t::take_first);
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "VectorFixedString", "[optiontype]")
@@ -298,7 +298,7 @@ TEST_CASE_METHOD(TApp, "VectorFixedString", "[optiontype]")
     std::vector<std::string> strvec;
     std::vector<std::string> answer {"mystring", "mystring2", "mystring3"};
 
-    CLI::Option *opt = app.add_option("-s,--string", strvec)->expected(3);
+    cli::option_t *opt = app.add_option("-s,--string", strvec)->expected(3);
     CHECK(opt->get_expected() == 3);
 
     args = {"--string", "mystring", "mystring2", "mystring3"};
@@ -312,7 +312,7 @@ TEST_CASE_METHOD(TApp, "VectorDefaultedFixedString", "[optiontype]")
     std::vector<std::string> strvec {"one"};
     std::vector<std::string> answer {"mystring", "mystring2", "mystring3"};
 
-    CLI::Option *opt = app.add_option("-s,--string", strvec, "")->expected(3)->capture_default_str();
+    cli::option_t *opt = app.add_option("-s,--string", strvec, "")->expected(3)->capture_default_str();
     CHECK(opt->get_expected() == 3);
 
     args = {"--string", "mystring", "mystring2", "mystring3"};
@@ -325,19 +325,19 @@ TEST_CASE_METHOD(TApp, "VectorIndexedValidator", "[optiontype]")
 {
     std::vector<int> vvec;
 
-    CLI::Option *opt = app.add_option("-v", vvec);
+    cli::option_t *opt = app.add_option("-v", vvec);
 
     args = {"-v", "1", "-1", "-v", "3", "-v", "-976"};
     run();
     CHECK(app.count("-v") == 4u);
     CHECK(vvec.size() == 4u);
-    opt->check(CLI::PositiveNumber.application_index(0));
-    opt->check((!CLI::PositiveNumber).application_index(1));
+    opt->check(cli::positive_number.application_index(0));
+    opt->check((!cli::positive_number).application_index(1));
     CHECK_NOTHROW(run());
     CHECK(vvec.size() == 4u);
     // v[3] would be negative
-    opt->check(CLI::PositiveNumber.application_index(3));
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    opt->check(cli::positive_number.application_index(3));
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "VectorUnlimString", "[optiontype]")
@@ -345,9 +345,9 @@ TEST_CASE_METHOD(TApp, "VectorUnlimString", "[optiontype]")
     std::vector<std::string> strvec;
     std::vector<std::string> answer {"mystring", "mystring2", "mystring3"};
 
-    CLI::Option *opt = app.add_option("-s,--string", strvec);
+    cli::option_t *opt = app.add_option("-s,--string", strvec);
     CHECK(opt->get_expected() == 1);
-    CHECK(opt->get_expected_max() == CLI::detail::expected_max_vector_size);
+    CHECK(opt->get_expected_max() == cli::detail::expected_max_vector_size);
 
     args = {"--string", "mystring", "mystring2", "mystring3"};
     run();
@@ -397,7 +397,7 @@ TEST_CASE_METHOD(TApp, "stringLikeTests", "[optiontype]")
 // https://github.com/Jean1995
 TEST_CASE_METHOD(TApp, "AsStringView", "[app]")
 {
-    app.add_option("--input", "input option")->default_val("optA")->check(CLI::IsMember({"optA", "optB", "optC"}));
+    app.add_option("--input", "input option")->default_val("optA")->check(cli::is_member_t({"optA", "optB", "optC"}));
 
     args = {};
     run();
@@ -414,7 +414,7 @@ TEST_CASE_METHOD(TApp, "AsStringView", "[app]")
 
 TEST_CASE_METHOD(TApp, "AsStringRef", "[app]")
 {
-    app.add_option("--input", "input option")->default_val("optA")->check(CLI::IsMember({"optA", "optB", "optC"}));
+    app.add_option("--input", "input option")->default_val("optA")->check(cli::is_member_t({"optA", "optB", "optC"}));
 
     args = {};
     run();
@@ -433,18 +433,18 @@ TEST_CASE_METHOD(TApp, "VectorExpectedRange", "[optiontype]")
 {
     std::vector<std::string> strvec;
 
-    CLI::Option *opt = app.add_option("--string", strvec);
-    opt->expected(2, 4)->multi_option_policy(CLI::MultiOptionPolicy::Throw);
+    cli::option_t *opt = app.add_option("--string", strvec);
+    opt->expected(2, 4)->multi_option_policy(cli::multi_option_policy_t::reject);
 
     args = {"--string", "mystring", "mystring2", "mystring3"};
     run();
     CHECK(app.count("--string") == 3u);
 
     args = {"--string", "mystring"};
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 
     args = {"--string", "mystring", "mystring2", "string2", "--string", "string4", "string5"};
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 
     CHECK(4 == opt->get_expected_max());
     CHECK(2 == opt->get_expected_min());
@@ -464,7 +464,7 @@ TEST_CASE_METHOD(TApp, "VectorFancyOpts", "[optiontype]")
     std::vector<std::string> strvec;
     std::vector<std::string> answer {"mystring", "mystring2", "mystring3"};
 
-    CLI::Option *opt = app.add_option("-s,--string", strvec)->required()->expected(3);
+    cli::option_t *opt = app.add_option("-s,--string", strvec)->required()->expected(3);
     CHECK(opt->get_expected() == 3);
 
     args = {"--string", "mystring", "mystring2", "mystring3"};
@@ -473,9 +473,9 @@ TEST_CASE_METHOD(TApp, "VectorFancyOpts", "[optiontype]")
     CHECK(strvec == answer);
 
     args = {"one", "two"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 }
 
 // #87
@@ -484,7 +484,7 @@ TEST_CASE_METHOD(TApp, "CustomDoubleOption", "[optiontype]")
 
     std::pair<int, double> custom_opt;
 
-    auto *opt = app.add_option("posit", [&custom_opt](CLI::results_t vals) {
+    auto *opt = app.add_option("posit", [&custom_opt](cli::results_t vals) {
         custom_opt = {stol(vals.at(0)), stod(vals.at(1))};
         return true;
     });
@@ -532,9 +532,9 @@ TEST_CASE_METHOD(TApp, "vectorPair", "[optiontype]")
     REQUIRE(3u == custom_opt.size());
     CHECK(-1 == custom_opt[2].first);
     CHECK("str4" == custom_opt[2].second);
-    opt->check(CLI::PositiveNumber.application_index(0));
+    opt->check(cli::positive_number.application_index(0));
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 // now with independent type sizes and expected this is possible
@@ -563,7 +563,7 @@ TEST_CASE_METHOD(TApp, "vectorPairFail", "[optiontype]")
 
     args = {"--dict", "1", "str1", "--dict", "str3", "1"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "vectorPairFail2", "[optiontype]")
@@ -580,7 +580,7 @@ TEST_CASE_METHOD(TApp, "vectorPairFail2", "[optiontype]")
 
     args = {"--pairs", "1", "2", "3"};
 
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
     // now change the type size to explicitly allow 1 or 2
     opt->type_size(1, 2);
 
@@ -645,14 +645,14 @@ TEST_CASE_METHOD(TApp, "ArrayTriple", "[optiontype]")
 
     CHECK(!std::is_convertible<TY, std::string>::value);
     CHECK(!std::is_constructible<std::string, TY>::value);
-    CHECK(!CLI::detail::is_ostreamable<TY>::value);
+    CHECK(!cli::detail::ostreamable<TY>);
     auto ts = std::tuple_size<typename std::decay<TY>::type>::value;
     CHECK(ts == 3);
 
-    auto vb = CLI::detail::type_count_base<TY>::value;
+    auto vb = cli::detail::type_count_base_v<TY>;
     CHECK(vb >= 2);
-    CHECK(!CLI::detail::is_complex<TY>::value);
-    CHECK(CLI::detail::is_tuple_like<TY>::value);
+    CHECK(!cli::detail::complex_like<TY>);
+    CHECK(cli::detail::tuple_like<TY>);
 }
 
 TEST_CASE_METHOD(TApp, "ArrayPair", "[optiontype]")
@@ -692,13 +692,13 @@ TEST_CASE_METHOD(TApp, "vectorTuple", "[optiontype]")
     CHECK(-1 == std::get<0>(custom_opt[2]));
     CHECK("str4" == std::get<1>(custom_opt[2]));
     CHECK(-1.87 == std::get<2>(custom_opt[2]));
-    opt->check(CLI::PositiveNumber.application_index(0));
+    opt->check(cli::positive_number.application_index(0));
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args.back() = "haha";
     args[9] = "45";
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 // now with independent type sizes and expected this is possible
@@ -724,14 +724,14 @@ TEST_CASE_METHOD(TApp, "vectorVector", "[optiontype]")
     CHECK(2u == custom_opt[1].size());
     CHECK(1u == custom_opt[2].size());
     CHECK(10u == custom_opt[3].size());
-    opt->check(CLI::PositiveNumber.application_index(9));
+    opt->check(cli::positive_number.application_index(9));
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args.pop_back();
     CHECK_NOTHROW(run());
 
     args.back() = "haha";
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"--dict", "1", "2", "4", "%%", "3", "1", "%%", "3", "%%", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3"};
     run();
@@ -754,10 +754,10 @@ TEST_CASE_METHOD(TApp, "vectorVectorFixedSize", "[optiontype]")
     CHECK(4u == custom_opt[1].size());
 
     args = {"--dict", "1", "2", "4", "--dict", "3", "1", "7", "6"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
     // this should reset it
-    opt->type_size(CLI::detail::expected_max_vector_size);
-    opt->type_size(1, CLI::detail::expected_max_vector_size);
+    opt->type_size(cli::detail::expected_max_vector_size);
+    opt->type_size(1, cli::detail::expected_max_vector_size);
     CHECK_NOTHROW(run());
     REQUIRE(2U == custom_opt.size());
 }
@@ -790,26 +790,26 @@ TEST_CASE_METHOD(TApp, "tupleintPair", "[optiontype]")
     CHECK(2.0 == std::get<1>(custom_opt).second);
 }
 
-static_assert(CLI::detail::is_mutable_container<std::set<std::string>>::value, "set should be a container");
-static_assert(CLI::detail::is_mutable_container<std::map<std::string, std::string>>::value,
+static_assert(cli::detail::mutable_container<std::set<std::string>>, "set should be a container");
+static_assert(cli::detail::mutable_container<std::map<std::string, std::string>>,
               "map should be a container");
-static_assert(CLI::detail::is_mutable_container<std::unordered_map<std::string, double>>::value,
+static_assert(cli::detail::mutable_container<std::unordered_map<std::string, double>>,
               "unordered_map should be a container");
 
-static_assert(CLI::detail::is_mutable_container<std::list<std::pair<int, std::string>>>::value,
+static_assert(cli::detail::mutable_container<std::list<std::pair<int, std::string>>>,
               "list should be a container");
 
-static_assert(CLI::detail::type_count<std::set<std::string>>::value == 1, "set should have a type size of 1");
-static_assert(CLI::detail::type_count<std::set<std::tuple<std::string, int, int>>>::value == 3,
+static_assert(cli::detail::type_count_v<std::set<std::string>> == 1, "set should have a type size of 1");
+static_assert(cli::detail::type_count_v<std::set<std::tuple<std::string, int, int>>> == 3,
               "tuple set should have size of 3");
-static_assert(CLI::detail::type_count<std::map<std::string, std::string>>::value == 2,
+static_assert(cli::detail::type_count_v<std::map<std::string, std::string>> == 2,
               "map should have a type size of 2");
-static_assert(CLI::detail::type_count<std::unordered_map<std::string, double>>::value == 2,
+static_assert(cli::detail::type_count_v<std::unordered_map<std::string, double>> == 2,
               "unordered_map should have a type size of 2");
 
-static_assert(CLI::detail::type_count<std::list<std::pair<int, std::string>>>::value == 2,
+static_assert(cli::detail::type_count_v<std::list<std::pair<int, std::string>>> == 2,
               "list<int,string> should have a type size of 2");
-static_assert(CLI::detail::type_count<std::map<std::string, std::pair<int, std::string>>>::value == 3,
+static_assert(cli::detail::type_count_v<std::map<std::string, std::pair<int, std::string>>> == 3,
               "map<string,pair<int,string>> should have a type size of 3");
 
 TEMPLATE_TEST_CASE("Container int single",
@@ -823,19 +823,19 @@ TEMPLATE_TEST_CASE("Container int single",
     TApp tapp;
     TestType cv;
 
-    CLI::Option *opt = tapp.app.add_option("-v", cv);
+    cli::option_t *opt = tapp.app.add_option("-v", cv);
 
     tapp.args = {"-v", "1", "-1", "-v", "3", "-v", "-976"};
     tapp.run();
     CHECK(tapp.app.count("-v") == 4u);
     CHECK(cv.size() == 4u);
-    opt->check(CLI::PositiveNumber.application_index(0));
-    opt->check((!CLI::PositiveNumber).application_index(1));
+    opt->check(cli::positive_number.application_index(0));
+    opt->check((!cli::positive_number).application_index(1));
     CHECK_NOTHROW(tapp.run());
     CHECK(cv.size() == 4u);
     // v[3] would be negative
-    opt->check(CLI::PositiveNumber.application_index(3));
-    CHECK_THROWS_AS(tapp.run(), CLI::ValidationError);
+    opt->check(cli::positive_number.application_index(3));
+    CHECK_THROWS_AS(tapp.run(), cli::validation_error_t);
 }
 
 using isp = std::pair<int, std::string>;
@@ -1077,7 +1077,7 @@ TEST_CASE_METHOD(TApp, "OnParseCall", "[optiontype]")
     int cnt {0};
 
     auto *opt = app.add_option("-c",
-                               [&cnt](const CLI::results_t &) {
+                               [&cnt](const cli::results_t &) {
                                    ++cnt;
                                    return true;
                                })
@@ -1097,7 +1097,7 @@ TEST_CASE_METHOD(TApp, "OnParseCallPositional", "[optiontype]")
     int cnt {0};
 
     auto *opt = app.add_option("pos",
-                               [&cnt](const CLI::results_t &) {
+                               [&cnt](const cli::results_t &) {
                                    ++cnt;
                                    return true;
                                })
@@ -1126,7 +1126,7 @@ TEST_CASE_METHOD(TApp, "force_callback", "[optiontype]")
     int cnt {0};
 
     auto *opt = app.add_option("-c",
-                               [&cnt](const CLI::results_t &) {
+                               [&cnt](const cli::results_t &) {
                                    ++cnt;
                                    return true;
                                })

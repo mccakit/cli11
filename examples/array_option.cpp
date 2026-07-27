@@ -12,7 +12,7 @@ import cli11;
 int main(int argc, char **argv)
 {
     std::array<int, 2> a {0, 1};
-    CLI::App app {"My app"};
+    cli::app_t app {"My app"};
     app.add_option("--a", a, "an array")->capture_default_str();
     app.parse(argc, argv);
 

@@ -1,5 +1,42 @@
+/// @file
+/// @brief The application type: the parser itself.
+///
+/// @ref cli::app_t is the entry point. Construct one, describe the interface with
+/// `add_option`, `add_flag`, and `add_subcommand`, then call `parse`:
+///
+/// @code
+/// int main(int argc, char **argv)
+/// {
+///     cli::app_t app{"my program"};
+///     std::string file;
+///     app.add_option("-f,--file", file, "the file to read")->required();
+///
+///     try
+///     {
+///         app.parse(argc, argv);
+///     }
+///     catch (const cli::parse_error_t &e)
+///     {
+///         return app.exit(e);
+///     }
+/// }
+/// @endcode
+///
+/// @note Upstream CLI11 offers a `CLI11_PARSE` macro for the try/catch above.
+/// It has no equivalent here: macros are not exported across module boundaries,
+/// so the explicit form is the only one.
+///
+/// Subcommands are themselves `app_t` instances, so everything that works on the
+/// top-level parser works on a subcommand. Option groups are subcommands with no
+/// name, which is why one class covers all three roles.
+///
+/// Parsing runs in phases: arguments are classified, matched to options or
+/// subcommands, collected, then validated and dispatched to callbacks. The phase
+/// helpers are the `_`-prefixed private members near the end of the class.
+
 module;
 #include <cerrno>
+
 export module cli11:app;
 
 import std;
@@ -13,251 +50,277 @@ import :encoding;
 import :config_fwd;
 import :formatter_fwd;
 
-export namespace CLI
+export namespace cli
 {
 
     namespace detail
     {
-        enum class Classifier : std::uint8_t
+
+        /// @brief What a single command-line argument looks like.
+        ///
+        /// @note `short_` and `long_` carry trailing underscores because `short` and
+        /// `long` are keywords.
+        enum class classifier_t : std::uint8_t
         {
-            NONE,
-            POSITIONAL_MARK,
-            SHORT,
-            LONG,
-            WINDOWS_STYLE,
-            SUBCOMMAND,
-            SUBCOMMAND_TERMINATOR
+            none,                 ///< Not recognised as any of the forms below.
+            positional_mark,      ///< The `--` separator.
+            short_,               ///< A short option, such as `-f`.
+            long_,                ///< A long option, such as `--file`.
+            windows_style,        ///< A Windows-style option, such as `/file`.
+            subcommand,           ///< The name of a subcommand.
+            subcommand_terminator ///< The `++` subcommand terminator.
         };
-        struct AppFriend;
+
+        struct app_friend_t;
+
     } // namespace detail
 
-    namespace FailureMessage
-    {
-        /// Printout a clean, simple message on error (the default in CLI11 1.5+)
-        std::string simple(const App *app, const Error &e);
+    class app_t;
 
-        /// Printout the full help string on error (if this fn is set, the old default for CLI11)
-        std::string help(const App *app, const Error &e);
-    } // namespace FailureMessage
-
-    /// enumeration of modes of how to deal with command line extras
-    enum class ExtrasMode : std::uint8_t
+    namespace failure_message
     {
-        Error = 0,
-        ErrorImmediately,
-        Ignore,
-        AssumeSingleArgument,
-        AssumeMultipleArguments,
-        Capture
+
+        /// @brief Prints a short one-line error message.
+        ///
+        /// The default since CLI11 1.5.
+        ///
+        /// @param app The application the error came from.
+        /// @param e The error to describe.
+        /// @return The message to print.
+        auto simple(const app_t *app, const error_t &e) -> std::string;
+
+        /// @brief Prints the full help text alongside the error.
+        ///
+        /// @param app The application the error came from.
+        /// @param e The error to describe.
+        /// @return The message to print.
+        auto help(const app_t *app, const error_t &e) -> std::string;
+
+    } // namespace failure_message
+
+    /// @brief What to do with command-line arguments that match nothing.
+    enum class extras_mode_t : std::uint8_t
+    {
+        error = 0,                ///< Report an error once parsing finishes.
+        error_immediately,        ///< Report an error as soon as one is seen.
+        ignore,                   ///< Leave them in the remaining-arguments list.
+        assume_single_argument,   ///< Treat the next argument as this option's value.
+        assume_multiple_arguments,///< Treat every following argument as this option's values.
+        capture                   ///< Collect them for the caller to inspect.
     };
 
-    /// enumeration of modes of how to deal with extras in config files
-    enum class ConfigExtrasMode : std::uint8_t
+    /// @brief What to do with configuration-file entries that match nothing.
+    ///
+    /// @note The original had two enumerations for this, `ConfigExtrasMode` and
+    /// `config_extras_mode`, with identical members. Lowercasing collapsed them into
+    /// one, which is this.
+    enum class config_extras_mode_t : std::uint8_t
     {
-        Error = 0,
-        Ignore,
-        IgnoreAll,
-        Capture
+        error = 0,  ///< Report an error.
+        ignore,     ///< Ignore the entry.
+        ignore_all, ///< Ignore the entry and everything nested under it.
+        capture     ///< Collect it for the caller to inspect.
     };
 
-    /// @brief  enumeration of modes of how to deal with extras in config files
-    enum class config_extras_mode : std::uint8_t
+    /// @brief When an unrecognised argument should stop parsing entirely.
+    ///
+    /// Prefix-command mode hands everything from that point on to the caller, which
+    /// is how a program forwards a trailing argument list to another tool.
+    enum class prefix_command_mode_t : std::uint8_t
     {
-        error = 0,
-        ignore,
-        ignore_all,
-        capture
+        off = 0,           ///< Never stop early.
+        separator_only = 1, ///< Stop only at a `--`; anything else is an error.
+        on = 2              ///< Stop at the first unrecognised argument.
     };
 
-    /// @brief  enumeration of prefix command modes, separator requires that the first extra argument be a "--", other
-    /// unrecognized arguments will cause an error. on allows the first extra to trigger prefix mode regardless of other
-    /// recognized options
-    enum class PrefixCommandMode : std::uint8_t
-    {
-        Off = 0,
-        SeparatorOnly = 1,
-        On = 2
-    };
-
-    class App;
-
-    using App_p = std::shared_ptr<App>;
+    /// @brief Shared handle to an application or subcommand.
+    using app_ptr_t = std::shared_ptr<app_t>;
 
     namespace detail
     {
-        /// helper functions for adding in appropriate flag modifiers for add_flag
 
-        template <typename T,
-                  enable_if_t<!std::is_integral<T>::value || (sizeof(T) <= 1U), detail::enabler> = detail::dummy>
-        Option *default_flag_modifiers(Option *opt)
+        /// @brief Applies the default settings for a flag bound to a non-counting type.
+        ///
+        /// @param opt The option to configure.
+        /// @return @p opt, for chaining.
+        template <typename T>
+            requires(!std::is_integral_v<T> || (sizeof(T) <= 1U))
+        auto default_flag_modifiers(option_t *opt) -> option_t *
         {
             return opt->always_capture_default();
         }
 
-        /// summing modifiers
-        template <typename T,
-                  enable_if_t<std::is_integral<T>::value && (sizeof(T) > 1U), detail::enabler> = detail::dummy>
-        Option *default_flag_modifiers(Option *opt)
+        /// @brief Applies the default settings for a flag bound to a counting type.
+        ///
+        /// An integer wider than a byte is taken to be a counter, so repeated
+        /// appearances sum rather than overwrite.
+        ///
+        /// @param opt The option to configure.
+        /// @return @p opt, for chaining.
+        template <typename T>
+            requires(std::is_integral_v<T> && (sizeof(T) > 1U))
+        auto default_flag_modifiers(option_t *opt) -> option_t *
         {
-            return opt->multi_option_policy(MultiOptionPolicy::Sum)->default_str("0")->force_callback();
+            return opt->multi_option_policy(multi_option_policy_t::sum)->default_str("0")->force_callback();
         }
 
     } // namespace detail
 
-    class Option_group;
-    /// Creates a command line program, with very few defaults.
-    /** To use, create a new `Program()` instance with `argc`, `argv`, and a help description. The templated
-     *  add_option methods make it easy to prepare options. Remember to call `.start` before starting your
-     * program, so that the options can be evaluated and the help option doesn't accidentally run your program. */
-    class App
+    class option_group_t;
+
+    /// @brief A command-line parser, a subcommand, or an option group.
+    ///
+    /// Create one, add options to it, and call @ref parse. Call @ref exit from a
+    /// `catch` block to turn a @ref cli::parse_error_t into a process exit code.
+    class app_t
     {
-            friend Option;
-            friend detail::AppFriend;
+            friend option_t;
+            friend detail::app_friend_t;
 
         protected:
-            // This library follows the Google style guide for member names ending in underscores
+            // Member names end in an underscore, following the Google style guide.
 
             /// @name Basics
             ///@{
 
-            /// Subcommand name or program name (from parser if name is empty)
+            /// @brief Subcommand name, or program name; taken from the parser when empty.
             std::string name_ {};
 
-            /// Description of the current program/subcommand
+            /// @brief Description of this program or subcommand.
             std::string description_ {};
 
-            /// If true, allow extra arguments (ie, don't throw an error). INHERITABLE
-            ExtrasMode allow_extras_ {ExtrasMode::Error};
+            /// @brief What to do with unmatched command-line arguments. Inheritable.
+            extras_mode_t allow_extras_ {extras_mode_t::error};
 
-            /// If ignore, allow extra arguments in the ini file (ie, don't throw an error). INHERITABLE
-            /// if error, error on an extra argument, and if capture feed it to the app
-            ConfigExtrasMode allow_config_extras_ {ConfigExtrasMode::Ignore};
+            /// @brief What to do with unmatched configuration entries. Inheritable.
+            config_extras_mode_t allow_config_extras_ {config_extras_mode_t::ignore};
 
-            ///  If true, cease processing on an unrecognized option (implies allow_extras) INHERITABLE
-            PrefixCommandMode prefix_command_ {PrefixCommandMode::Off};
+            /// @brief Whether an unrecognised argument stops parsing. Inheritable.
+            prefix_command_mode_t prefix_command_ {prefix_command_mode_t::off};
 
-            /// If set to true the name was automatically generated from the command line vs a user set name
+            /// @brief Whether the name was taken from the command line rather than set.
             bool has_automatic_name_ {false};
 
-            /// If set to true the subcommand is required to be processed and used, ignored for main app
+            /// @brief Whether this subcommand must be used; ignored for the main app.
             bool required_ {false};
 
-            /// If set to true the subcommand is disabled and cannot be used, ignored for main app
+            /// @brief Whether this subcommand is disabled; ignored for the main app.
             bool disabled_ {false};
 
-            /// Flag indicating that the pre_parse_callback has been triggered
+            /// @brief Whether @ref pre_parse_callback_ has already fired.
             bool pre_parse_called_ {false};
 
-            /// Flag indicating that the callback for the subcommand should be executed immediately on parse completion
-            /// which is before help or ini files are processed. INHERITABLE
+            /// @brief Whether the callback runs on parse completion, before help and
+            /// configuration files are handled. Inheritable.
             bool immediate_callback_ {false};
 
-            /// This is a function that runs prior to the start of parsing
+            /// @brief Runs before parsing starts, given the argument count.
             std::function<void(std::size_t)> pre_parse_callback_ {};
 
-            /// This is a function that runs when parsing has finished.
+            /// @brief Runs once parsing has finished.
             std::function<void()> parse_complete_callback_ {};
 
-            /// This is a function that runs when all processing has completed
+            /// @brief Runs once all processing has finished.
             std::function<void()> final_callback_ {};
 
             ///@}
             /// @name Options
             ///@{
 
-            /// The default values for options, customizable and changeable INHERITABLE
-            OptionDefaults option_defaults_ {};
+            /// @brief Settings newly added options inherit. Inheritable.
+            option_defaults_t option_defaults_ {};
 
-            /// The list of options, stored locally
-            std::vector<Option_p> options_ {};
+            /// @brief The options owned by this application.
+            std::vector<option_ptr_t> options_ {};
 
             ///@}
             /// @name Help
             ///@{
 
-            /// Usage to put after program/subcommand description in the help output INHERITABLE
+            /// @brief Usage line placed after the description. Inheritable.
             std::string usage_ {};
 
-            /// This is a function that generates a usage to put after program/subcommand description in help output
+            /// @brief Generates the usage line, when one is not set directly.
             std::function<std::string()> usage_callback_ {};
 
-            /// Footer to put after all options in the help output INHERITABLE
+            /// @brief Footer placed after all options. Inheritable.
             std::string footer_ {};
 
-            /// This is a function that generates a footer to put after all other options in help output
+            /// @brief Generates the footer, when one is not set directly.
             std::function<std::string()> footer_callback_ {};
 
-            /// A pointer to the help flag if there is one INHERITABLE
-            Option *help_ptr_ {nullptr};
+            /// @brief The help option, if one was added. Inheritable.
+            option_t *help_ptr_ {nullptr};
 
-            /// A pointer to the help all flag if there is one INHERITABLE
-            Option *help_all_ptr_ {nullptr};
+            /// @brief The expanded-help option, if one was added. Inheritable.
+            option_t *help_all_ptr_ {nullptr};
 
-            /// A pointer to a version flag if there is one
-            Option *version_ptr_ {nullptr};
+            /// @brief The version option, if one was added.
+            option_t *version_ptr_ {nullptr};
 
-            /// This is the formatter for help printing. Default provided. INHERITABLE (same pointer)
-            std::shared_ptr<FormatterBase> formatter_ {new Formatter()};
+            /// @brief Renders help output. Inheritable, and shared by pointer.
+            std::shared_ptr<formatter_base_t> formatter_ {std::make_shared<formatter_t>()};
 
-            /// The error message printing function INHERITABLE
-            std::function<std::string(const App *, const Error &e)> failure_message_ {FailureMessage::simple};
+            /// @brief Renders an error into the message printed by @ref exit. Inheritable.
+            std::function<std::string(const app_t *, const error_t &)> failure_message_ {
+                failure_message::simple};
 
             ///@}
             /// @name Parsing
             ///@{
 
-            using missing_t = std::vector<std::pair<detail::Classifier, std::string>>;
-
-            /// Pair of classifier, string for missing options. (extra detail is removed on returning from parse)
+            /// @brief Arguments that matched nothing, paired with how they were classified.
             ///
-            /// This is faster and cleaner than storing just a list of strings and reparsing. This may contain the --
-            /// separator.
+            /// Keeping the classification avoids reclassifying on the way back out. May
+            /// contain the `--` separator.
+            using missing_t = std::vector<std::pair<detail::classifier_t, std::string>>;
+
+            /// @brief Arguments that matched nothing. Extra detail is stripped on return
+            /// from @ref parse.
             missing_t missing_ {};
 
-            /// This is a list of pointers to options with the original parse order
-            std::vector<Option *> parse_order_ {};
+            /// @brief The options that were used, in the order they appeared.
+            std::vector<option_t *> parse_order_ {};
 
-            /// This is a list of the subcommands collected, in order
-            std::vector<App *> parsed_subcommands_ {};
+            /// @brief The subcommands that were used, in the order they appeared.
+            std::vector<app_t *> parsed_subcommands_ {};
 
-            /// this is a list of subcommands that are exclusionary to this one
-            std::set<App *> exclude_subcommands_ {};
+            /// @brief Subcommands that may not be used alongside this one.
+            std::set<app_t *> exclude_subcommands_ {};
 
-            /// This is a list of options which are exclusionary to this App, if the options were used this subcommand
-            /// should not be
-            std::set<Option *> exclude_options_ {};
+            /// @brief Options that may not be used alongside this subcommand.
+            std::set<option_t *> exclude_options_ {};
 
-            /// this is a list of subcommands or option groups that are required by this one, the list is not mutual,
-            /// the listed subcommands do not require this one
-            std::set<App *> need_subcommands_ {};
+            /// @brief Subcommands this one requires. Not mutual: they do not require this one.
+            std::set<app_t *> need_subcommands_ {};
 
-            /// This is a list of options which are required by this app, the list is not mutual, listed options do not
-            /// need the subcommand not be
-            std::set<Option *> need_options_ {};
+            /// @brief Options this subcommand requires. Not mutual.
+            std::set<option_t *> need_options_ {};
 
             ///@}
             /// @name Subcommands
             ///@{
 
-            /// Storage for subcommand list
-            std::vector<App_p> subcommands_ {};
+            /// @brief The subcommands owned by this application.
+            std::vector<app_ptr_t> subcommands_ {};
 
-            /// If true, the program name is not case-sensitive INHERITABLE
+            /// @brief Whether subcommand name matching ignores case. Inheritable.
             bool ignore_case_ {false};
 
-            /// If true, the program should ignore underscores INHERITABLE
+            /// @brief Whether subcommand name matching ignores underscores. Inheritable.
             bool ignore_underscore_ {false};
 
-            /// Allow options or other arguments to fallthrough, so that parent commands can collect options after
-            /// subcommand. INHERITABLE
+            /// @brief Whether options may fall through to a parent command.
+            ///
+            /// Lets a parent collect options written after a subcommand name. Inheritable.
             bool fallthrough_ {false};
 
-            /// Allow subcommands to fallthrough, so that parent commands can trigger other subcommands after
-            /// subcommand.
+            /// @brief Whether a later subcommand may be triggered from within this one.
             bool subcommand_fallthrough_ {true};
 
-            /// Allow '/' for options for Windows like options. Defaults to true on Windows, false otherwise.
-            /// INHERITABLE
+            /// @brief Whether `/opt` is accepted as an option form.
+            ///
+            /// Defaults to enabled on Windows only. Inheritable.
             bool allow_windows_style_options_ {
 #ifdef _WIN32
                 true
@@ -265,112 +328,135 @@ export namespace CLI
                 false
 #endif
             };
-            /// specify that positional arguments come at the end of the argument sequence not inheritable
+
+            /// @brief Whether positionals must come after every option. Not inheritable.
             bool positionals_at_end_ {false};
 
-            enum class startup_mode : std::uint8_t
+            /// @brief Whether @ref clear leaves this subcommand enabled or disabled.
+            enum class startup_mode_t : std::uint8_t
             {
-                stable,
-                enabled,
-                disabled
+                stable,  ///< Leave the enabled state as it is.
+                enabled, ///< Enable at the start of each parse.
+                disabled ///< Disable at the start of each parse.
             };
-            /// specify the startup mode for the app
-            /// stable=no change, enabled= startup enabled, disabled=startup disabled
-            startup_mode default_startup {startup_mode::stable};
 
-            /// if set to true the subcommand can be triggered via configuration files INHERITABLE
+            /// @brief What @ref clear does to this subcommand's enabled state.
+            startup_mode_t default_startup {startup_mode_t::stable};
+
+            /// @brief Whether this subcommand can be triggered from a configuration file. Inheritable.
             bool configurable_ {false};
 
-            /// If set to true positional options are validated before assigning INHERITABLE
+            /// @brief Whether positionals are validated before being assigned. Inheritable.
             bool validate_positionals_ {false};
 
-            /// If set to true optional vector arguments are validated before assigning INHERITABLE
+            /// @brief Whether optional vector arguments are validated before being assigned. Inheritable.
             bool validate_optional_arguments_ {false};
 
-            /// indicator that the subcommand is silent and won't show up in subcommands list
-            /// This is potentially useful as a modifier subcommand
+            /// @brief Whether this subcommand is hidden from the subcommand list.
+            ///
+            /// Useful for a subcommand that only modifies how the parent behaves.
             bool silent_ {false};
 
-            /// indicator that the subcommand should allow non-standard option arguments, such as -single_dash_flag
+            /// @brief Whether non-standard option names such as `-single_dash_flag` are accepted.
             bool allow_non_standard_options_ {false};
 
-            /// indicator to allow subcommands to match with prefix matching
+            /// @brief Whether a subcommand may be matched by a unique prefix of its name.
             bool allow_prefix_matching_ {false};
 
-            /// Counts the number of times this command/subcommand was parsed
+            /// @brief How many times this command or subcommand has been parsed.
             std::uint32_t parsed_ {0U};
 
-            /// Minimum required subcommands (not inheritable!)
+            /// @brief Smallest number of subcommands that must be used. Not inheritable.
             std::size_t require_subcommand_min_ {0};
 
-            /// Max number of subcommands allowed (parsing stops after this number). 0 is unlimited INHERITABLE
+            /// @brief Largest number of subcommands accepted; `0` is unlimited. Inheritable.
+            ///
+            /// Parsing stops once this many have been seen.
             std::size_t require_subcommand_max_ {0};
 
-            /// Minimum required options (not inheritable!)
+            /// @brief Smallest number of options that must be used. Not inheritable.
             std::size_t require_option_min_ {0};
 
-            /// Max number of options allowed. 0 is unlimited (not inheritable)
+            /// @brief Largest number of options accepted; `0` is unlimited. Not inheritable.
             std::size_t require_option_max_ {0};
 
-            /// A pointer to the parent if this is a subcommand
-            App *parent_ {nullptr};
+            /// @brief The parent application, if this is a subcommand.
+            app_t *parent_ {nullptr};
 
-            /// The group membership INHERITABLE
+            /// @brief The help group this subcommand is listed under. Inheritable.
             std::string group_ {"SUBCOMMANDS"};
 
-            /// Alias names for the subcommand
+            /// @brief Alternative names this subcommand answers to.
             std::vector<std::string> aliases_ {};
 
             ///@}
             /// @name Config
             ///@{
 
-            /// Pointer to the config option
-            Option *config_ptr_ {nullptr};
+            /// @brief The option naming a configuration file, if one was added.
+            option_t *config_ptr_ {nullptr};
 
-            /// This is the formatter for help printing. Default provided. INHERITABLE (same pointer)
-            std::shared_ptr<Config> config_formatter_ {new ConfigTOML()};
+            /// @brief Reads and writes configuration files. Inheritable, shared by pointer.
+            std::shared_ptr<config_t> config_formatter_ {std::make_shared<config_toml_t>()};
 
             ///@}
 
 #ifdef _WIN32
-            /// When normalizing argv to UTF-8 on Windows, this is the storage for normalized args.
+            /// @brief Storage backing the UTF-8 arguments produced by @ref ensure_utf8.
             std::vector<std::string> normalized_argv_ {};
 
-            /// When normalizing argv to UTF-8 on Windows, this is the `char**` value returned to the user.
+            /// @brief The `char **` handed back by @ref ensure_utf8, pointing into
+            /// @ref normalized_argv_.
             std::vector<char *> normalized_argv_view_ {};
 #endif
 
-            /// Special private constructor for subcommand
-            App(std::string app_description, std::string app_name, App *parent);
+            /// @brief Constructs a subcommand.
+            ///
+            /// @param app_description The description shown in help output.
+            /// @param app_name The subcommand name.
+            /// @param parent The owning application.
+            app_t(std::string app_description, std::string app_name, app_t *parent);
 
         public:
             /// @name Basic
             ///@{
 
-            /// Create a new program. Pass in the same arguments as main(), along with a help string.
-            explicit App(std::string app_description = "", std::string app_name = "")
-                : App(app_description, app_name, nullptr)
+            /// @brief Constructs a top-level application.
+            ///
+            /// A `-h,--help` flag is added automatically; remove it with
+            /// @ref set_help_flag if you want to supply your own.
+            ///
+            /// @param app_description The description shown in help output.
+            /// @param app_name The program name; taken from the command line when empty.
+            explicit app_t(std::string app_description = "", std::string app_name = "")
+                : app_t(std::move(app_description), std::move(app_name), nullptr)
             {
                 set_help_flag("-h,--help", "Print this help message and exit");
             }
 
-            App(const App &) = delete;
-            App &operator=(const App &) = delete;
+            app_t(const app_t &) = delete;
+            auto operator=(const app_t &) -> app_t & = delete;
 
-            /// virtual destructor
-            virtual ~App() = default;
+            virtual ~app_t() = default;
 
-            /// Convert the contents of argv to UTF-8. Only does something on Windows, does nothing elsewhere.
-            [[nodiscard]] char **ensure_utf8(char **argv);
-
-            /// Set a callback for execution when all parsing and processing has completed
+            /// @brief Converts `argv` to UTF-8 on Windows; does nothing elsewhere.
             ///
-            /// Due to a bug in c++11,
-            /// it is not possible to overload on std::function (fixed in c++14
-            /// and backported to c++11 on newer compilers). Use capture by reference
-            /// to get a pointer to App if needed.
-            App *callback(std::function<void()> app_callback)
+            /// The converted strings are owned by this application, so the returned
+            /// pointer stays valid for as long as it does.
+            ///
+            /// @param argv The argument array from `main`.
+            /// @return The converted argument array.
+            [[nodiscard]] auto ensure_utf8(char **argv) -> char **;
+
+            /// @brief Sets the callback run once everything has been parsed and processed.
+            ///
+            /// Assigns to @ref parse_complete_callback when @ref immediate_callback is
+            /// set, and to @ref final_callback otherwise. Capture by reference if the
+            /// callback needs the application itself.
+            ///
+            /// @param app_callback The callback to run.
+            /// @return A pointer to this application, for chaining.
+            auto callback(std::function<void()> app_callback) -> app_t *
             {
                 if (immediate_callback_)
                 {
@@ -383,234 +469,330 @@ export namespace CLI
                 return this;
             }
 
-            /// Set a callback for execution when all parsing and processing has completed
-            /// aliased as callback
-            App *final_callback(std::function<void()> app_callback)
+            /// @brief Sets the callback run once everything has been processed.
+            ///
+            /// @param app_callback The callback to run.
+            /// @return A pointer to this application, for chaining.
+            auto final_callback(std::function<void()> app_callback) -> app_t *
             {
                 final_callback_ = std::move(app_callback);
                 return this;
             }
 
-            /// Set a callback to execute when parsing has completed for the app
+            /// @brief Sets the callback run once parsing has finished.
             ///
-            App *parse_complete_callback(std::function<void()> pc_callback)
+            /// @param pc_callback The callback to run.
+            /// @return A pointer to this application, for chaining.
+            auto parse_complete_callback(std::function<void()> pc_callback) -> app_t *
             {
                 parse_complete_callback_ = std::move(pc_callback);
                 return this;
             }
 
-            /// Set a callback to execute prior to parsing.
+            /// @brief Sets the callback run before parsing starts.
             ///
-            App *preparse_callback(std::function<void(std::size_t)> pp_callback)
+            /// @param pp_callback The callback to run, given the argument count.
+            /// @return A pointer to this application, for chaining.
+            auto preparse_callback(std::function<void(std::size_t)> pp_callback) -> app_t *
             {
                 pre_parse_callback_ = std::move(pp_callback);
                 return this;
             }
 
-            /// Set a name for the app (empty will use parser to set the name)
-            App *name(std::string app_name = "");
+            /// @brief Sets the application or subcommand name.
+            ///
+            /// @param app_name The name; an empty string defers to the command line.
+            /// @return A pointer to this application, for chaining.
+            auto name(std::string app_name = "") -> app_t *;
 
-            /// Set an alias for the app
-            App *alias(std::string app_name);
+            /// @brief Adds an alternative name this subcommand answers to.
+            ///
+            /// @param app_name The alias.
+            /// @return A pointer to this application, for chaining.
+            auto alias(std::string app_name) -> app_t *;
 
-            /// Remove the error when extras are left over on the command line.
-            App *allow_extras(bool allow = true)
+            /// @brief Accepts unmatched arguments instead of reporting them.
+            ///
+            /// @param allow Whether to accept them.
+            /// @return A pointer to this application, for chaining.
+            auto allow_extras(bool allow = true) -> app_t *
             {
-                allow_extras_ = allow ? ExtrasMode::Capture : ExtrasMode::Error;
+                allow_extras_ = allow ? extras_mode_t::capture : extras_mode_t::error;
                 return this;
             }
 
-            /// Remove the error when extras are left over on the command line.
-            App *allow_extras(ExtrasMode allow)
+            /// @brief Sets what happens to unmatched arguments.
+            ///
+            /// @param allow The mode to use.
+            /// @return A pointer to this application, for chaining.
+            auto allow_extras(extras_mode_t allow) -> app_t *
             {
                 allow_extras_ = allow;
                 return this;
             }
 
-            /// Remove the error when extras are left over on the command line.
-            App *required(bool require = true)
+            /// @brief Requires this subcommand to be used.
+            ///
+            /// @param require Whether the subcommand is required.
+            /// @return A pointer to this application, for chaining.
+            auto required(bool require = true) -> app_t *
             {
                 required_ = require;
                 return this;
             }
 
-            /// Disable the subcommand or option group
-            App *disabled(bool disable = true)
+            /// @brief Disables this subcommand or option group.
+            ///
+            /// @param disable Whether to disable it.
+            /// @return A pointer to this application, for chaining.
+            auto disabled(bool disable = true) -> app_t *
             {
                 disabled_ = disable;
                 return this;
             }
 
-            /// silence the subcommand from showing up in the processed list
-            App *silent(bool silence = true)
+            /// @brief Hides this subcommand from the processed subcommand list.
+            ///
+            /// @param silence Whether to hide it.
+            /// @return A pointer to this application, for chaining.
+            auto silent(bool silence = true) -> app_t *
             {
                 silent_ = silence;
                 return this;
             }
 
-            /// allow non standard option names
-            App *allow_non_standard_option_names(bool allowed = true)
+            /// @brief Accepts non-standard option names such as `-single_dash_flag`.
+            ///
+            /// @param allowed Whether to accept them.
+            /// @return A pointer to this application, for chaining.
+            auto allow_non_standard_option_names(bool allowed = true) -> app_t *
             {
                 allow_non_standard_options_ = allowed;
                 return this;
             }
 
-            /// allow prefix matching for subcommands
-            App *allow_subcommand_prefix_matching(bool allowed = true)
+            /// @brief Lets a subcommand be matched by a unique prefix of its name.
+            ///
+            /// @param allowed Whether to allow prefix matching.
+            /// @return A pointer to this application, for chaining.
+            auto allow_subcommand_prefix_matching(bool allowed = true) -> app_t *
             {
                 allow_prefix_matching_ = allowed;
                 return this;
             }
-            /// Set the subcommand to be disabled by default, so on clear(), at the start of each parse it is disabled
-            App *disabled_by_default(bool disable = true)
+
+            /// @brief Makes @ref clear leave this subcommand disabled.
+            ///
+            /// Turning this off returns to the stable state unless
+            /// @ref enabled_by_default was set, which takes precedence.
+            ///
+            /// @param disable Whether to disable by default.
+            /// @return A pointer to this application, for chaining.
+            auto disabled_by_default(bool disable = true) -> app_t *
             {
                 if (disable)
                 {
-                    default_startup = startup_mode::disabled;
+                    default_startup = startup_mode_t::disabled;
                 }
                 else
                 {
-                    default_startup =
-                        (default_startup == startup_mode::enabled) ? startup_mode::enabled : startup_mode::stable;
+                    default_startup = (default_startup == startup_mode_t::enabled) ? startup_mode_t::enabled
+                                                                                   : startup_mode_t::stable;
                 }
                 return this;
             }
 
-            /// Set the subcommand to be enabled by default, so on clear(), at the start of each parse it is enabled
-            /// (not disabled)
-            App *enabled_by_default(bool enable = true)
+            /// @brief Makes @ref clear leave this subcommand enabled.
+            ///
+            /// Turning this off returns to the stable state unless
+            /// @ref disabled_by_default was set, which takes precedence.
+            ///
+            /// @param enable Whether to enable by default.
+            /// @return A pointer to this application, for chaining.
+            auto enabled_by_default(bool enable = true) -> app_t *
             {
                 if (enable)
                 {
-                    default_startup = startup_mode::enabled;
+                    default_startup = startup_mode_t::enabled;
                 }
                 else
                 {
-                    default_startup =
-                        (default_startup == startup_mode::disabled) ? startup_mode::disabled : startup_mode::stable;
+                    default_startup = (default_startup == startup_mode_t::disabled) ? startup_mode_t::disabled
+                                                                                    : startup_mode_t::stable;
                 }
                 return this;
             }
 
-            /// Set the subcommand callback to be executed immediately on subcommand completion
-            App *immediate_callback(bool immediate = true);
+            /// @brief Runs this subcommand's callback as soon as it finishes parsing.
+            ///
+            /// @param immediate Whether to run the callback immediately.
+            /// @return A pointer to this application, for chaining.
+            auto immediate_callback(bool immediate = true) -> app_t *;
 
-            /// Set the subcommand to validate positional arguments before assigning
-            App *validate_positionals(bool validate = true)
+            /// @brief Validates positionals before assigning them.
+            ///
+            /// @param validate Whether to validate first.
+            /// @return A pointer to this application, for chaining.
+            auto validate_positionals(bool validate = true) -> app_t *
             {
                 validate_positionals_ = validate;
                 return this;
             }
 
-            /// Set the subcommand to validate optional vector arguments before assigning
-            App *validate_optional_arguments(bool validate = true)
+            /// @brief Validates optional vector arguments before assigning them.
+            ///
+            /// @param validate Whether to validate first.
+            /// @return A pointer to this application, for chaining.
+            auto validate_optional_arguments(bool validate = true) -> app_t *
             {
                 validate_optional_arguments_ = validate;
                 return this;
             }
 
-            /// ignore extras in config files
-            App *allow_config_extras(bool allow = true)
+            /// @brief Accepts unmatched configuration entries instead of reporting them.
+            ///
+            /// Enabling this also enables @ref allow_extras, since a captured
+            /// configuration entry has to go somewhere.
+            ///
+            /// @param allow Whether to accept them.
+            /// @return A pointer to this application, for chaining.
+            auto allow_config_extras(bool allow = true) -> app_t *
             {
                 if (allow)
                 {
-                    allow_config_extras_ = ConfigExtrasMode::Capture;
-                    allow_extras_ = ExtrasMode::Capture;
+                    allow_config_extras_ = config_extras_mode_t::capture;
+                    allow_extras_ = extras_mode_t::capture;
                 }
                 else
                 {
-                    allow_config_extras_ = ConfigExtrasMode::Error;
+                    allow_config_extras_ = config_extras_mode_t::error;
                 }
                 return this;
             }
 
-            /// ignore extras in config files
-            App *allow_config_extras(config_extras_mode mode)
-            {
-                allow_config_extras_ = static_cast<ConfigExtrasMode>(mode);
-                return this;
-            }
-
-            /// ignore extras in config files
-            App *allow_config_extras(ConfigExtrasMode mode)
+            /// @brief Sets what happens to unmatched configuration entries.
+            ///
+            /// @note The original declared this twice, once taking `config_extras_mode`
+            /// and once taking `ConfigExtrasMode`. Those were distinct types holding the
+            /// same enumerators, and merging them leaves a single overload.
+            ///
+            /// @param mode The mode to use.
+            /// @return A pointer to this application, for chaining.
+            auto allow_config_extras(config_extras_mode_t mode) -> app_t *
             {
                 allow_config_extras_ = mode;
                 return this;
             }
 
-            /// Enable or disable prefix command mode. If enabled, parsing stops at the
-            /// first unrecognized option and all remaining arguments are stored in
-            /// remaining args.
-            App *prefix_command(bool is_prefix = true)
+            /// @brief Stops parsing at the first unrecognised argument.
+            ///
+            /// Everything from that point on is left in the remaining-arguments list.
+            ///
+            /// @param is_prefix Whether to stop early.
+            /// @return A pointer to this application, for chaining.
+            auto prefix_command(bool is_prefix = true) -> app_t *
             {
-                prefix_command_ = is_prefix ? PrefixCommandMode::On : PrefixCommandMode::Off;
+                prefix_command_ = is_prefix ? prefix_command_mode_t::on : prefix_command_mode_t::off;
                 return this;
             }
 
-            /// Set the prefix command mode directly.
-            App *prefix_command(PrefixCommandMode mode)
+            /// @brief Sets when parsing stops early.
+            ///
+            /// @param mode The mode to use.
+            /// @return A pointer to this application, for chaining.
+            auto prefix_command(prefix_command_mode_t mode) -> app_t *
             {
                 prefix_command_ = mode;
                 return this;
             }
 
-            /// Ignore case. Subcommands inherit value.
-            App *ignore_case(bool value = true);
+            /// @brief Makes name matching case-insensitive. Subcommands inherit this.
+            ///
+            /// @param value Whether to ignore case.
+            /// @return A pointer to this application, for chaining.
+            auto ignore_case(bool value = true) -> app_t *;
 
-            /// Allow windows style options, such as `/opt`. First matching short or long name used. Subcommands inherit
-            /// value.
-            App *allow_windows_style_options(bool value = true)
+            /// @brief Accepts Windows-style options such as `/opt`.
+            ///
+            /// The first matching short or long name wins. Subcommands inherit this.
+            ///
+            /// @param value Whether to accept them.
+            /// @return A pointer to this application, for chaining.
+            auto allow_windows_style_options(bool value = true) -> app_t *
             {
                 allow_windows_style_options_ = value;
                 return this;
             }
 
-            /// Specify that the positional arguments are only at the end of the sequence
-            App *positionals_at_end(bool value = true)
+            /// @brief Requires positionals to appear after every option.
+            ///
+            /// @param value Whether positionals come last.
+            /// @return A pointer to this application, for chaining.
+            auto positionals_at_end(bool value = true) -> app_t *
             {
                 positionals_at_end_ = value;
                 return this;
             }
 
-            /// Specify that the subcommand can be triggered by a config file
-            App *configurable(bool value = true)
+            /// @brief Lets this subcommand be triggered from a configuration file.
+            ///
+            /// @param value Whether the subcommand is configurable.
+            /// @return A pointer to this application, for chaining.
+            auto configurable(bool value = true) -> app_t *
             {
                 configurable_ = value;
                 return this;
             }
 
-            /// Ignore underscore. Subcommands inherit value.
-            App *ignore_underscore(bool value = true);
+            /// @brief Makes name matching ignore underscores. Subcommands inherit this.
+            ///
+            /// @param value Whether to ignore underscores.
+            /// @return A pointer to this application, for chaining.
+            auto ignore_underscore(bool value = true) -> app_t *;
 
-            /// Set the help formatter
-            App *formatter(std::shared_ptr<FormatterBase> fmt)
+            /// @brief Replaces the help formatter.
+            ///
+            /// @param fmt The formatter to use.
+            /// @return A pointer to this application, for chaining.
+            auto formatter(std::shared_ptr<formatter_base_t> fmt) -> app_t *
             {
-                formatter_ = fmt;
+                formatter_ = std::move(fmt);
                 return this;
             }
 
-            /// Set the help formatter
-            App *formatter_fn(std::function<std::string(const App *, std::string, AppFormatMode)> fmt)
+            /// @brief Replaces the help formatter with a callable.
+            ///
+            /// @param fmt Renders the whole help page.
+            /// @return A pointer to this application, for chaining.
+            auto formatter_fn(std::function<std::string(const app_t *, std::string, app_format_mode_t)>
+                                  fmt) -> app_t *
             {
-                formatter_ = std::make_shared<FormatterLambda>(fmt);
+                formatter_ = std::make_shared<formatter_lambda_t>(std::move(fmt));
                 return this;
             }
 
-            /// Set the config formatter
-            App *config_formatter(std::shared_ptr<Config> fmt)
+            /// @brief Replaces the configuration reader and writer.
+            ///
+            /// @param fmt The converter to use.
+            /// @return A pointer to this application, for chaining.
+            auto config_formatter(std::shared_ptr<config_t> fmt) -> app_t *
             {
-                config_formatter_ = fmt;
+                config_formatter_ = std::move(fmt);
                 return this;
             }
 
-            /// Check to see if this subcommand was parsed, true only if received on command line.
-            [[nodiscard]] bool parsed() const
+            /// @brief Reports whether this subcommand appeared on the command line.
+            ///
+            /// @return `true` if it was parsed at least once.
+            [[nodiscard]] auto parsed() const -> bool
             {
                 return parsed_ > 0;
             }
 
-            /// Get the OptionDefault object, to set option defaults
-            OptionDefaults *option_defaults()
+            /// @brief Returns the settings newly added options inherit.
+            ///
+            /// @return A pointer to the option defaults.
+            auto option_defaults() -> option_defaults_t *
             {
                 return &option_defaults_;
             }
@@ -619,235 +801,344 @@ export namespace CLI
             /// @name Adding options
             ///@{
 
-            /// Add an option, will automatically understand the type for common types.
+            /// @brief Adds an option driven by a callback.
             ///
-            /// To use, create a variable with the expected type, and pass it in after the name.
-            /// After start is called, you can use count to see if the value was passed, and
-            /// the value will be initialized properly. Numbers, vectors, and strings are supported.
+            /// The other `add_option` overloads build on this one.
             ///
-            /// ->required(), ->default, and the validators are options,
-            /// The positional options take an optional number of arguments.
-            ///
-            /// For example,
-            ///
-            ///     std::string filename;
-            ///     program.add_option("filename", filename, "description of filename");
-            ///
-            Option *add_option(std::string option_name,
-                               callback_t option_callback,
-                               std::string option_description = "",
-                               bool defaulted = false,
-                               std::function<std::string()> func = {});
+            /// @param option_name The name specification, for example `"-f,--file"`.
+            /// @param option_callback Consumes the collected results.
+            /// @param option_description The description shown in help output.
+            /// @param defaulted Whether the bound value already holds a usable default.
+            /// @param func Produces the printed default.
+            /// @return A pointer to the new option, for chaining.
+            auto add_option(std::string option_name, callback_t option_callback, std::string option_description = "",
+                            bool defaulted = false,
+                            std::function<std::string()> func = {}) -> option_t *;
 
-            /// Add option for assigning to a variable
-            template <typename AssignTo,
-                      typename ConvertTo = AssignTo,
-                      enable_if_t<!std::is_const<ConvertTo>::value, detail::enabler> = detail::dummy>
-            Option *add_option(std::string option_name,
-                               AssignTo &variable, ///< The variable to set
-                               std::string option_description = "")
+            /// @brief Adds an option bound to a variable.
+            ///
+            /// The variable's type determines how many values the option takes and how
+            /// they are converted. Supply @p convert_to_t when the value should be read
+            /// as one type and stored as another.
+            ///
+            /// @code
+            /// std::string filename;
+            /// program.add_option("filename", filename, "description of filename");
+            /// @endcode
+            ///
+            /// @tparam assign_to_t The type of the bound variable.
+            /// @tparam convert_to_t The type values are parsed as.
+            /// @param option_name The name specification.
+            /// @param variable The variable to fill.
+            /// @param option_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename assign_to_t, typename convert_to_t = assign_to_t>
+                requires(!std::is_const_v<convert_to_t>)
+            auto add_option(std::string option_name, assign_to_t &variable,
+                            std::string option_description = "") -> option_t *
             {
-
-                auto fun = [&variable](const CLI::results_t &res) { // comment for spacing
-                    return detail::lexical_conversion<AssignTo, ConvertTo>(res, variable);
+                auto fun = [&variable](const results_t &res) {
+                    return detail::lexical_conversion<assign_to_t, convert_to_t>(res, variable);
                 };
 
-                Option *opt = add_option(option_name, fun, option_description, false, [&variable]() {
-                    return CLI::detail::checked_to_string<AssignTo, ConvertTo>(variable);
+                option_t *opt = add_option(option_name, fun, option_description, false, [&variable] {
+                    return detail::checked_to_string<assign_to_t, convert_to_t>(variable);
                 });
-                opt->type_name(detail::type_name<ConvertTo>());
-                // these must be actual lvalues since (std::max) sometimes is defined in terms of references and
-                // references to structs used in the evaluation can be temporary so that would cause issues.
-                auto Tcount = detail::type_count<AssignTo>::value;
-                auto XCcount = detail::type_count<ConvertTo>::value;
-                opt->type_size(detail::type_count_min<ConvertTo>::value, (std::max)(Tcount, XCcount));
-                opt->expected(detail::expected_count<ConvertTo>::value);
+                opt->type_name(detail::type_name<convert_to_t>());
+
+                // Bound to named values because some standard libraries define std::max
+                // in terms of references, and a reference to a temporary would dangle.
+                const auto t_count = detail::type_count_v<assign_to_t>;
+                const auto xc_count = detail::type_count_v<convert_to_t>;
+                opt->type_size(detail::type_count_min_v<convert_to_t>, (std::max)(t_count, xc_count));
+                opt->expected(detail::expected_count_v<convert_to_t>);
                 opt->run_callback_for_default();
                 return opt;
             }
 
-            /// Add option for assigning to a variable
-            template <typename AssignTo, enable_if_t<!std::is_const<AssignTo>::value, detail::enabler> = detail::dummy>
-            Option *add_option_no_stream(std::string option_name,
-                                         AssignTo &variable, ///< The variable to set
-                                         std::string option_description = "")
+            /// @brief Adds an option bound to a variable, without a printed default.
+            ///
+            /// For types that have no usable string representation.
+            ///
+            /// @tparam assign_to_t The type of the bound variable.
+            /// @param option_name The name specification.
+            /// @param variable The variable to fill.
+            /// @param option_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename assign_to_t>
+                requires(!std::is_const_v<assign_to_t>)
+            auto add_option_no_stream(std::string option_name, assign_to_t &variable,
+                                      std::string option_description = "") -> option_t *
             {
-
-                auto fun = [&variable](const CLI::results_t &res) { // comment for spacing
-                    return detail::lexical_conversion<AssignTo, AssignTo>(res, variable);
+                auto fun = [&variable](const results_t &res) {
+                    return detail::lexical_conversion<assign_to_t, assign_to_t>(res, variable);
                 };
 
-                Option *opt = add_option(option_name, fun, option_description, false, []() { return std::string {}; });
-                opt->type_name(detail::type_name<AssignTo>());
-                opt->type_size(detail::type_count_min<AssignTo>::value, detail::type_count<AssignTo>::value);
-                opt->expected(detail::expected_count<AssignTo>::value);
+                option_t *opt =
+                    add_option(option_name, fun, option_description, false, [] { return std::string {}; });
+                opt->type_name(detail::type_name<assign_to_t>());
+                opt->type_size(detail::type_count_min_v<assign_to_t>, detail::type_count_v<assign_to_t>);
+                opt->expected(detail::expected_count_v<assign_to_t>);
                 opt->run_callback_for_default();
                 return opt;
             }
 
-            /// Add option for a callback of a specific type
-            template <typename ArgType>
-            Option *add_option_function(std::string option_name,
-                                        const std::function<void(const ArgType &)> &func, ///< the callback to execute
-                                        std::string option_description = "")
+            /// @brief Adds an option that hands its converted value to a callback.
+            ///
+            /// @tparam arg_type_t The type values are converted to.
+            /// @param option_name The name specification.
+            /// @param func Receives the converted value.
+            /// @param option_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename arg_type_t>
+            auto add_option_function(std::string option_name,
+                                     std::function<void(const arg_type_t &)> func,
+                                     std::string option_description = "") -> option_t *
             {
-
-                auto fun = [func](const CLI::results_t &res) {
-                    ArgType variable;
-                    bool result = detail::lexical_conversion<ArgType, ArgType>(res, variable);
+                auto fun = [f = std::move(func)](const results_t &res) {
+                    arg_type_t variable;
+                    const bool result = detail::lexical_conversion<arg_type_t, arg_type_t>(res, variable);
                     if (result)
                     {
-                        func(variable);
+                        f(variable);
                     }
                     return result;
                 };
 
-                Option *opt = add_option(option_name, std::move(fun), option_description, false);
-                opt->type_name(detail::type_name<ArgType>());
-                opt->type_size(detail::type_count_min<ArgType>::value, detail::type_count<ArgType>::value);
-                opt->expected(detail::expected_count<ArgType>::value);
+                option_t *opt = add_option(option_name, std::move(fun), option_description, false);
+                opt->type_name(detail::type_name<arg_type_t>());
+                opt->type_size(detail::type_count_min_v<arg_type_t>, detail::type_count_v<arg_type_t>);
+                opt->expected(detail::expected_count_v<arg_type_t>);
                 return opt;
             }
 
-            /// Add option with no description or variable assignment
-            Option *add_option(std::string option_name)
+            /// @brief Adds an option with no description and no bound variable.
+            ///
+            /// @param option_name The name specification.
+            /// @return A pointer to the new option, for chaining.
+            auto add_option(std::string option_name) -> option_t *
             {
-                return add_option(option_name, CLI::callback_t {}, std::string {}, false);
+                return add_option(option_name, callback_t {}, std::string {}, false);
             }
 
-            /// Add option with description but with no variable assignment or callback
-            template <typename T,
-                      enable_if_t<std::is_const<T>::value && std::is_constructible<std::string, T>::value,
-                                  detail::enabler> = detail::dummy>
-            Option *add_option(std::string option_name, T &option_description)
+            /// @brief Adds an option with a description but no bound variable.
+            ///
+            /// @tparam T A const string-like type.
+            /// @param option_name The name specification.
+            /// @param option_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename T>
+                requires(std::is_const_v<T> && std::is_constructible_v<std::string, T>)
+            auto add_option(std::string option_name, T &option_description) -> option_t *
             {
-                return add_option(option_name, CLI::callback_t(), option_description, false);
+                return add_option(option_name, callback_t(), option_description, false);
             }
 
-            /// Set a help flag, replace the existing one if present
-            Option *set_help_flag(std::string flag_name = "", const std::string &help_description = "");
+            /// @brief Replaces the help flag.
+            ///
+            /// An empty @p flag_name removes the help flag entirely.
+            ///
+            /// @param flag_name The name specification.
+            /// @param help_description The description shown in help output.
+            /// @return A pointer to the new option, or `nullptr` if it was removed.
+            auto set_help_flag(std::string flag_name = "", const std::string &help_description = "") -> option_t *;
 
-            /// Set a help all flag, replaced the existing one if present
-            Option *set_help_all_flag(std::string help_name = "", const std::string &help_description = "");
+            /// @brief Replaces the expanded-help flag.
+            ///
+            /// An empty @p help_name removes it entirely.
+            ///
+            /// @param help_name The name specification.
+            /// @param help_description The description shown in help output.
+            /// @return A pointer to the new option, or `nullptr` if it was removed.
+            auto set_help_all_flag(std::string help_name = "",
+                                   const std::string &help_description = "") -> option_t *;
 
-            /// Set a version flag and version display string, replace the existing one if present
-            Option *set_version_flag(std::string flag_name = "",
-                                     const std::string &versionString = "",
-                                     const std::string &version_help = "Display program version information and exit");
+            /// @brief Replaces the version flag with a fixed version string.
+            ///
+            /// @param flag_name The name specification.
+            /// @param version_string The version text to print.
+            /// @param version_help The description shown in help output.
+            /// @return A pointer to the new option, or `nullptr` if it was removed.
+            auto set_version_flag(std::string flag_name = "", const std::string &version_string = "",
+                                  const std::string &version_help =
+                                      "Display program version information and exit") -> option_t *;
 
-            /// Generate the version string through a callback function
-            Option *set_version_flag(std::string flag_name,
-                                     std::function<std::string()> vfunc,
-                                     const std::string &version_help = "Display program version information and exit");
+            /// @brief Replaces the version flag with one that generates its text.
+            ///
+            /// @param flag_name The name specification.
+            /// @param vfunc Produces the version text.
+            /// @param version_help The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            auto set_version_flag(std::string flag_name, std::function<std::string()> vfunc,
+                                  const std::string &version_help =
+                                      "Display program version information and exit") -> option_t *;
 
         private:
-            /// Internal function for adding a flag
-            Option *_add_flag_internal(std::string flag_name, CLI::callback_t fun, std::string flag_description);
+            /// @brief Adds a flag, shared by every public `add_flag` overload.
+            ///
+            /// @param flag_name The name specification.
+            /// @param fun Consumes the collected results.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            auto _add_flag_internal(std::string flag_name, callback_t fun,
+                                    std::string flag_description) -> option_t *;
 
         public:
-            /// Add a flag with no description or variable assignment
-            Option *add_flag(std::string flag_name)
+            /// @brief Adds a flag with no description and no bound variable.
+            ///
+            /// @param flag_name The name specification.
+            /// @return A pointer to the new option, for chaining.
+            auto add_flag(std::string flag_name) -> option_t *
             {
-                return _add_flag_internal(flag_name, CLI::callback_t(), std::string {});
+                return _add_flag_internal(flag_name, callback_t(), std::string {});
             }
 
-            /// Add flag with description but with no variable assignment or callback
-            /// takes a constant string or a rvalue reference to a string,  if a variable string is passed that variable
-            /// will be assigned the results from the flag
-            template <
-                typename T,
-                enable_if_t<(std::is_const<typename std::remove_reference<T>::type>::value ||
-                             std::is_rvalue_reference<T &&>::value) &&
-                                std::is_constructible<std::string, typename std::remove_reference<T>::type>::value,
-                            detail::enabler> = detail::dummy>
-            Option *add_flag(std::string flag_name, T &&flag_description)
+            /// @brief Adds a flag with a description but no bound variable.
+            ///
+            /// Takes a const string or an rvalue string. A non-const lvalue string binds
+            /// to the overload below instead, and receives the flag's result.
+            ///
+            /// @tparam T A const or rvalue string-like type.
+            /// @param flag_name The name specification.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename T>
+                requires((std::is_const_v<std::remove_reference_t<T>> || std::is_rvalue_reference_v<T &&>) &&
+                         std::is_constructible_v<std::string, std::remove_reference_t<T>>)
+            auto add_flag(std::string flag_name, T &&flag_description) -> option_t *
             {
-                return _add_flag_internal(flag_name, CLI::callback_t(), std::forward<T>(flag_description));
+                return _add_flag_internal(flag_name, callback_t(), std::forward<T>(flag_description));
             }
 
-            /// Other type version accepts all other types that are not vectors such as bool, enum, string or other
-            /// classes that can be converted from a string
-            template <typename T,
-                      enable_if_t<!detail::is_mutable_container<T>::value && !std::is_const<T>::value &&
-                                      !std::is_constructible<std::function<void(int)>, T>::value,
-                                  detail::enabler> = detail::dummy>
-            Option *add_flag(std::string flag_name,
-                             T &flag_result, ///< A variable holding the flag result
-                             std::string flag_description = "")
+            /// @brief Adds a flag bound to a variable.
+            ///
+            /// Accepts anything that is not a container and not callable: `bool`, an
+            /// enumeration, a string, an integer counter, or any type constructible from
+            /// a string. An integer wider than a byte is treated as a counter.
+            ///
+            /// @tparam T The type of the bound variable.
+            /// @param flag_name The name specification.
+            /// @param flag_result The variable to fill.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename T>
+                requires(!detail::mutable_container<T> && !std::is_const_v<T> &&
+                         !std::is_constructible_v<std::function<void(std::int64_t)>, T>)
+            auto add_flag(std::string flag_name, T &flag_result,
+                          std::string flag_description = "") -> option_t *
             {
-
-                CLI::callback_t fun = [&flag_result](const CLI::results_t &res) {
-                    using CLI::detail::lexical_cast;
+                callback_t fun = [&flag_result](const results_t &res) {
+                    using detail::lexical_cast;
                     return lexical_cast(res[0], flag_result);
                 };
                 auto *opt = _add_flag_internal(flag_name, std::move(fun), std::move(flag_description));
                 return detail::default_flag_modifiers<T>(opt);
             }
 
-            /// Vector version to capture multiple flags.
-            template <typename T,
-                      enable_if_t<!std::is_assignable<std::function<void(std::int64_t)> &, T>::value, detail::enabler> =
-                          detail::dummy>
-            Option *add_flag(std::string flag_name,
-                             std::vector<T> &flag_results, ///< A vector of values with the flag results
-                             std::string flag_description = "")
+            /// @brief Adds a flag that collects a value for every appearance.
+            ///
+            /// @tparam T The element type of the bound vector.
+            /// @param flag_name The name specification.
+            /// @param flag_results The vector to append to.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            template <typename T>
+                requires(!std::is_assignable_v<std::function<void(std::int64_t)> &, T>)
+            auto add_flag(std::string flag_name, std::vector<T> &flag_results,
+                          std::string flag_description = "") -> option_t *
             {
-                CLI::callback_t fun = [&flag_results](const CLI::results_t &res) {
+                callback_t fun = [&flag_results](const results_t &res) {
                     bool retval = true;
                     for (const auto &elem : res)
                     {
-                        using CLI::detail::lexical_cast;
+                        using detail::lexical_cast;
                         flag_results.emplace_back();
                         retval &= lexical_cast(elem, flag_results.back());
                     }
                     return retval;
                 };
                 return _add_flag_internal(flag_name, std::move(fun), std::move(flag_description))
-                    ->multi_option_policy(MultiOptionPolicy::TakeAll)
+                    ->multi_option_policy(multi_option_policy_t::take_all)
                     ->run_callback_for_default();
             }
 
-            /// Add option for callback that is triggered with a true flag and takes no arguments
-            Option *add_flag_callback(std::string flag_name,
-                                      std::function<void(void)> function, ///< A function to call, void(void)
-                                      std::string flag_description = "");
+            /// @brief Adds a flag that calls a function taking no arguments.
+            ///
+            /// @param flag_name The name specification.
+            /// @param function Called once when the flag is used.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            auto add_flag_callback(std::string flag_name, std::function<void()> function,
+                                   std::string flag_description = "") -> option_t *;
 
-            /// Add option for callback with an integer value
-            Option *add_flag_function(std::string flag_name,
-                                      std::function<void(std::int64_t)> function, ///< A function to call, void(int)
-                                      std::string flag_description = "");
+            /// @brief Adds a flag that calls a function with its accumulated count.
+            ///
+            /// @param flag_name The name specification.
+            /// @param function Called with the flag's value.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            auto add_flag_function(std::string flag_name, std::function<void(std::int64_t)> function,
+                                   std::string flag_description = "") -> option_t *;
 
-            /// Add option for callback (C++14 or better only)
-            Option *add_flag(std::string flag_name,
-                             std::function<void(std::int64_t)> function, ///< A function to call, void(std::int64_t)
-                             std::string flag_description = "")
+            /// @brief Adds a flag that calls a function with its accumulated count.
+            ///
+            /// Aliases @ref add_flag_function.
+            ///
+            /// @param flag_name The name specification.
+            /// @param function Called with the flag's value.
+            /// @param flag_description The description shown in help output.
+            /// @return A pointer to the new option, for chaining.
+            auto add_flag(std::string flag_name, std::function<void(std::int64_t)> function,
+                          std::string flag_description = "") -> option_t *
             {
                 return add_flag_function(std::move(flag_name), std::move(function), std::move(flag_description));
             }
 
-            /// Set a configuration ini file option, or clear it if no name passed
-            Option *set_config(std::string option_name = "",
-                               std::string default_filename = "",
-                               const std::string &help_message = "Read an ini file",
-                               bool config_required = false);
+            /// @brief Sets the option that names a configuration file.
+            ///
+            /// An empty @p option_name removes it.
+            ///
+            /// @param option_name The name specification.
+            /// @param default_filename The file read when the option is not given.
+            /// @param help_message The description shown in help output.
+            /// @param config_required Whether the file must exist.
+            /// @return A pointer to the new option, or `nullptr` if it was removed.
+            auto set_config(std::string option_name = "", std::string default_filename = "",
+                            const std::string &help_message = "Read an ini file",
+                            bool config_required = false) -> option_t *;
 
-            /// Removes an option from the App. Takes an option pointer. Returns true if found and removed.
-            bool remove_option(Option *opt);
+            /// @brief Removes an option from this application.
+            ///
+            /// @param opt The option to remove.
+            /// @return `true` if the option was found and removed.
+            auto remove_option(option_t *opt) -> bool;
 
-            /// creates an option group as part of the given app
-            template <typename T = Option_group>
-            T *add_option_group(std::string group_name, std::string group_description = "")
+            /// @brief Adds an option group.
+            ///
+            /// An option group is a subcommand with no name: it groups options in help
+            /// output and can carry its own requirements, but is never named on the
+            /// command line.
+            ///
+            /// @tparam T The group type to create.
+            /// @param group_name The group name.
+            /// @param group_description The description shown in help output.
+            /// @return A pointer to the new group, for chaining.
+            /// @throws cli::incorrect_construction_t If @p group_name contains a newline
+            /// or null character.
+            template <typename T = option_group_t>
+            auto add_option_group(std::string group_name, std::string group_description = "") -> T *
             {
                 if (!detail::valid_alias_name_string(group_name))
                 {
-                    throw IncorrectConstruction("option group names may not contain newlines or null characters");
+                    throw incorrect_construction_t("option group names may not contain newlines or null characters");
                 }
                 auto option_group = std::make_shared<T>(std::move(group_description), group_name, this);
                 option_group->fallthrough(false);
                 auto *ptr = option_group.get();
-                // move to App_p for overload resolution on older gcc versions
-                App_p app_ptr = std::static_pointer_cast<App>(option_group);
-                // don't inherit the footer in option groups and clear the help flag by default
+
+                app_ptr_t app_ptr = std::static_pointer_cast<app_t>(option_group);
+                // An option group neither inherits the parent's footer nor carries a
+                // help flag of its own.
                 app_ptr->footer_ = "";
                 app_ptr->set_help_flag();
                 add_subcommand(std::move(app_ptr));
@@ -858,72 +1149,129 @@ export namespace CLI
             /// @name Subcommands
             ///@{
 
-            /// Add a subcommand. Inherits INHERITABLE and OptionDefaults, and help flag
-            App *add_subcommand(std::string subcommand_name = "", std::string subcommand_description = "");
+            /// @brief Adds a subcommand.
+            ///
+            /// The subcommand inherits the inheritable settings and the option defaults.
+            ///
+            /// @param subcommand_name The subcommand name.
+            /// @param subcommand_description The description shown in help output.
+            /// @return A pointer to the new subcommand, for chaining.
+            auto add_subcommand(std::string subcommand_name = "",
+                                std::string subcommand_description = "") -> app_t *;
 
-            /// Add a previously created app as a subcommand
-            App *add_subcommand(CLI::App_p subcom);
+            /// @brief Adds an already-constructed application as a subcommand.
+            ///
+            /// @param subcom The subcommand to adopt.
+            /// @return A pointer to the subcommand, for chaining.
+            auto add_subcommand(app_ptr_t subcom) -> app_t *;
 
-            /// Removes a subcommand from the App. Takes a subcommand pointer. Returns true if found and removed.
-            bool remove_subcommand(App *subcom);
+            /// @brief Removes a subcommand from this application.
+            ///
+            /// @param subcom The subcommand to remove.
+            /// @return `true` if the subcommand was found and removed.
+            auto remove_subcommand(app_t *subcom) -> bool;
 
-            /// Check to see if a subcommand is part of this command (doesn't have to be in command line)
-            /// returns the first subcommand if passed a nullptr
-            App *get_subcommand(const App *subcom) const;
+            /// @brief Finds a subcommand by pointer.
+            ///
+            /// @param subcom The subcommand to look for; `nullptr` returns the first one.
+            /// @return A pointer to the subcommand.
+            /// @throws cli::option_not_found_t If it is not a subcommand of this application.
+            auto get_subcommand(const app_t *subcom) const -> app_t *;
 
-            /// Check to see if a subcommand is part of this command (text version)
-            [[nodiscard]] App *get_subcommand(std::string subcom) const;
+            /// @brief Finds a subcommand by name.
+            ///
+            /// @param subcom The name to look for.
+            /// @return A pointer to the subcommand.
+            /// @throws cli::option_not_found_t If no subcommand matches.
+            [[nodiscard]] auto get_subcommand(std::string subcom) const -> app_t *;
 
-            /// Get a subcommand by name (noexcept non-const version)
-            /// returns null if subcommand doesn't exist
-            [[nodiscard]] App *get_subcommand_no_throw(std::string subcom) const noexcept;
+            /// @brief Finds a subcommand by name, without throwing.
+            ///
+            /// @param subcom The name to look for.
+            /// @return A pointer to the subcommand, or `nullptr` if none matches.
+            [[nodiscard]] auto get_subcommand_no_throw(std::string subcom) const noexcept -> app_t *;
 
-            /// Get a pointer to subcommand by index
-            [[nodiscard]] App *get_subcommand(int index = 0) const;
+            /// @brief Finds a subcommand by position.
+            ///
+            /// @param index The position to look up.
+            /// @return A pointer to the subcommand.
+            /// @throws cli::option_not_found_t If @p index is out of range.
+            [[nodiscard]] auto get_subcommand(int index = 0) const -> app_t *;
 
-            /// Check to see if a subcommand is part of this command and get a shared_ptr to it
-            CLI::App_p get_subcommand_ptr(App *subcom) const;
+            /// @brief Finds a subcommand by pointer and returns an owning handle.
+            ///
+            /// @param subcom The subcommand to look for.
+            /// @return A shared handle to the subcommand.
+            /// @throws cli::option_not_found_t If it is not a subcommand of this application.
+            auto get_subcommand_ptr(app_t *subcom) const -> app_ptr_t;
 
-            /// Check to see if a subcommand is part of this command (text version)
-            [[nodiscard]] CLI::App_p get_subcommand_ptr(std::string subcom) const;
+            /// @brief Finds a subcommand by name and returns an owning handle.
+            ///
+            /// @param subcom The name to look for.
+            /// @return A shared handle to the subcommand.
+            /// @throws cli::option_not_found_t If no subcommand matches.
+            [[nodiscard]] auto get_subcommand_ptr(std::string subcom) const -> app_ptr_t;
 
-            /// Get an owning pointer to subcommand by index
-            [[nodiscard]] CLI::App_p get_subcommand_ptr(int index = 0) const;
+            /// @brief Finds a subcommand by position and returns an owning handle.
+            ///
+            /// @param index The position to look up.
+            /// @return A shared handle to the subcommand.
+            /// @throws cli::option_not_found_t If @p index is out of range.
+            [[nodiscard]] auto get_subcommand_ptr(int index = 0) const -> app_ptr_t;
 
-            /// Check to see if an option group is part of this App
-            [[nodiscard]] App *get_option_group(std::string group_name) const;
+            /// @brief Finds an option group by name.
+            ///
+            /// @param group_name The group name.
+            /// @return A pointer to the group.
+            /// @throws cli::option_not_found_t If no group matches.
+            [[nodiscard]] auto get_option_group(std::string group_name) const -> app_t *;
 
-            /// No argument version of count counts the number of times this subcommand was
-            /// passed in. The main app will return 1. Unnamed subcommands will also return 1 unless
-            /// otherwise modified in a callback
-            [[nodiscard]] std::size_t count() const
+            /// @brief Returns how many times this subcommand was used.
+            ///
+            /// The main application reports 1, as does an unnamed subcommand unless a
+            /// callback changes it.
+            ///
+            /// @return The use count.
+            [[nodiscard]] auto count() const -> std::size_t
             {
                 return parsed_;
             }
 
-            /// Get a count of all the arguments processed in options and subcommands, this excludes arguments which
-            /// were treated as extras.
-            [[nodiscard]] std::size_t count_all() const;
+            /// @brief Returns how many arguments were consumed by options and subcommands.
+            ///
+            /// Arguments treated as extras are not counted.
+            ///
+            /// @return The argument count.
+            [[nodiscard]] auto count_all() const -> std::size_t;
 
-            /// Changes the group membership
-            App *group(std::string group_name)
+            /// @brief Sets the help group this subcommand is listed under.
+            ///
+            /// @param group_name The group name.
+            /// @return A pointer to this application, for chaining.
+            auto group(std::string group_name) -> app_t *
             {
-                group_ = group_name;
+                group_ = std::move(group_name);
                 return this;
             }
 
-            /// The argumentless form of require subcommand requires 1 or more subcommands
-            App *require_subcommand()
+            /// @brief Requires at least one subcommand to be used.
+            ///
+            /// @return A pointer to this application, for chaining.
+            auto require_subcommand() -> app_t *
             {
                 require_subcommand_min_ = 1;
                 require_subcommand_max_ = 0;
                 return this;
             }
 
-            /// Require a subcommand to be given (does not affect help call)
-            /// The number required can be given. Negative values indicate maximum
-            /// number allowed (0 for any number). Max number inheritable.
-            App *require_subcommand(int value)
+            /// @brief Requires a given number of subcommands.
+            ///
+            /// A negative value sets a maximum instead of an exact count; `0` means
+            /// unlimited. Does not affect a help request. The maximum is inheritable.
+            ///
+            /// @param value The count, or its negation for a maximum.
+            /// @return A pointer to this application, for chaining.
+            auto require_subcommand(int value) -> app_t *
             {
                 if (value < 0)
                 {
@@ -938,27 +1286,38 @@ export namespace CLI
                 return this;
             }
 
-            /// Explicitly control the number of subcommands required. Setting 0
-            /// for the max means unlimited number allowed. Max number inheritable.
-            App *require_subcommand(std::size_t min, std::size_t max)
+            /// @brief Requires a number of subcommands within a range.
+            ///
+            /// A maximum of `0` means unlimited. The maximum is inheritable.
+            ///
+            /// @param min The smallest acceptable count.
+            /// @param max The largest acceptable count.
+            /// @return A pointer to this application, for chaining.
+            auto require_subcommand(std::size_t min, std::size_t max) -> app_t *
             {
                 require_subcommand_min_ = min;
                 require_subcommand_max_ = max;
                 return this;
             }
 
-            /// The argumentless form of require option requires 1 or more options be used
-            App *require_option()
+            /// @brief Requires at least one option to be used.
+            ///
+            /// @return A pointer to this application, for chaining.
+            auto require_option() -> app_t *
             {
                 require_option_min_ = 1;
                 require_option_max_ = 0;
                 return this;
             }
 
-            /// Require an option to be given (does not affect help call)
-            /// The number required can be given. Negative values indicate maximum
-            /// number allowed (0 for any number).
-            App *require_option(int value)
+            /// @brief Requires a given number of options.
+            ///
+            /// A negative value sets a maximum instead of an exact count; `0` means
+            /// unlimited. Does not affect a help request.
+            ///
+            /// @param value The count, or its negation for a maximum.
+            /// @return A pointer to this application, for chaining.
+            auto require_option(int value) -> app_t *
             {
                 if (value < 0)
                 {
@@ -973,33 +1332,48 @@ export namespace CLI
                 return this;
             }
 
-            /// Explicitly control the number of options required. Setting 0
-            /// for the max means unlimited number allowed. Max number inheritable.
-            App *require_option(std::size_t min, std::size_t max)
+            /// @brief Requires a number of options within a range.
+            ///
+            /// A maximum of `0` means unlimited.
+            ///
+            /// @param min The smallest acceptable count.
+            /// @param max The largest acceptable count.
+            /// @return A pointer to this application, for chaining.
+            auto require_option(std::size_t min, std::size_t max) -> app_t *
             {
                 require_option_min_ = min;
                 require_option_max_ = max;
                 return this;
             }
 
-            /// Set fallthrough, set to true so that options will fallthrough to parent if not recognized in a
-            /// subcommand Default from parent, usually set on parent.
-            App *fallthrough(bool value = true)
+            /// @brief Lets unrecognised options fall through to the parent command.
+            ///
+            /// Inherited from the parent, and usually set there.
+            ///
+            /// @param value Whether to allow fallthrough.
+            /// @return A pointer to this application, for chaining.
+            auto fallthrough(bool value = true) -> app_t *
             {
                 fallthrough_ = value;
                 return this;
             }
 
-            /// Set subcommand fallthrough, set to true so that subcommands on parents are recognized
-            App *subcommand_fallthrough(bool value = true)
+            /// @brief Lets a parent's subcommands be recognised from within this one.
+            ///
+            /// @param value Whether to allow subcommand fallthrough.
+            /// @return A pointer to this application, for chaining.
+            auto subcommand_fallthrough(bool value = true) -> app_t *
             {
                 subcommand_fallthrough_ = value;
                 return this;
             }
 
-            /// Check to see if this subcommand was parsed, true only if received on command line.
-            /// This allows the subcommand to be directly checked.
-            explicit operator bool() const
+            /// @brief Reports whether this subcommand appeared on the command line.
+            ///
+            /// Lets a subcommand be tested directly: `if (*sub) { ... }`.
+            ///
+            /// @return `true` if it was parsed at least once.
+            [[nodiscard]] explicit operator bool() const
             {
                 return parsed_ > 0;
             }
@@ -1008,117 +1382,197 @@ export namespace CLI
             /// @name Extras for subclassing
             ///@{
 
-            /// This allows subclasses to inject code before callbacks but after parse.
+            /// @brief Hook run after parsing but before the callbacks.
             ///
-            /// This does not run if any errors or help is thrown.
-            virtual void pre_callback()
+            /// Does not run if an error or a help request was thrown.
+            virtual auto pre_callback() -> void
             {
             }
 
             ///@}
             /// @name Parsing
             ///@{
-            //
-            /// Reset the parsed data
-            void clear();
 
-            /// Parses the command line - throws errors.
-            /// This must be called after the options are in but before the rest of the program.
-            void parse(int argc, const char *const *argv);
-            void parse(int argc, const wchar_t *const *argv);
+            /// @brief Discards everything collected by a previous parse.
+            auto clear() -> void;
+
+            /// @brief Parses the command line.
+            ///
+            /// Call once every option and subcommand has been added.
+            ///
+            /// @param argc The argument count, as given to `main`.
+            /// @param argv The argument array, as given to `main`.
+            /// @throws cli::parse_error_t If the command line cannot be parsed.
+            auto parse(int argc, const char *const *argv) -> void;
+
+            /// @brief Parses a wide command line.
+            ///
+            /// The arguments are narrowed to UTF-8 first.
+            ///
+            /// @param argc The argument count.
+            /// @param argv The argument array.
+            /// @throws cli::parse_error_t If the command line cannot be parsed.
+            auto parse(int argc, const wchar_t *const *argv) -> void;
 
         private:
-            template <class CharT> void parse_char_t(int argc, const CharT *const *argv);
+            /// @brief Parses an argument array of either character type.
+            ///
+            /// @tparam char_t The character type of the argument array.
+            /// @param argc The argument count.
+            /// @param argv The argument array.
+            template <class char_t> auto parse_char_t(int argc, const char_t *const *argv) -> void;
 
         public:
-            /// Parse a single string as if it contained command line arguments.
-            /// This function splits the string into arguments then calls parse(std::vector<std::string> &)
-            /// the function takes an optional boolean argument specifying if the programName is included in the string
-            /// to process
-            void parse(std::string commandline, bool program_name_included = false);
-            void parse(std::wstring commandline, bool program_name_included = false);
+            /// @brief Parses a whole command line held in one string.
+            ///
+            /// The string is split into arguments and handed to the vector overload.
+            ///
+            /// @param commandline The command line to parse.
+            /// @param program_name_included Whether @p commandline starts with the
+            /// program name.
+            /// @throws cli::parse_error_t If the command line cannot be parsed.
+            auto parse(std::string commandline, bool program_name_included = false) -> void;
 
-            /// The real work is done here. Expects a reversed vector.
-            /// Changes the vector to the remaining options.
-            void parse(std::vector<std::string> &args);
+            /// @brief Parses a whole wide command line held in one string.
+            ///
+            /// @param commandline The command line to parse.
+            /// @param program_name_included Whether @p commandline starts with the
+            /// program name.
+            /// @throws cli::parse_error_t If the command line cannot be parsed.
+            auto parse(std::wstring commandline, bool program_name_included = false) -> void;
 
-            /// The real work is done here. Expects a reversed vector.
-            void parse(std::vector<std::string> &&args);
+            /// @brief Parses a list of arguments, in reverse order.
+            ///
+            /// This is where the work happens; the other overloads funnel into it.
+            /// @p args is left holding whatever was not consumed.
+            ///
+            /// @param[in,out] args The arguments, last one first.
+            /// @throws cli::parse_error_t If the arguments cannot be parsed.
+            auto parse(std::vector<std::string> &args) -> void;
 
-            void parse_from_stream(std::istream &input);
+            /// @brief Parses a list of arguments, in reverse order.
+            ///
+            /// @param args The arguments, last one first.
+            /// @throws cli::parse_error_t If the arguments cannot be parsed.
+            auto parse(std::vector<std::string> &&args) -> void;
 
-            /// Provide a function to print a help message. The function gets access to the App pointer and error.
-            void failure_message(std::function<std::string(const App *, const Error &e)> function)
+            /// @brief Parses arguments read from a stream as a configuration file.
+            ///
+            /// @param input The stream to read.
+            /// @throws cli::parse_error_t If the contents cannot be parsed.
+            auto parse_from_stream(std::istream &input) -> void;
+
+            /// @brief Sets how an error is rendered by @ref exit.
+            ///
+            /// @param function Receives the application and the error, returns the text
+            /// to print.
+            auto failure_message(std::function<std::string(const app_t *, const error_t &)> function)
+                -> void
             {
-                failure_message_ = function;
+                failure_message_ = std::move(function);
             }
 
-            /// Print a nice error message and return the exit code
-            int exit(const Error &e, std::ostream &out = std::cout, std::ostream &err = std::cerr) const;
+            /// @brief Prints an error and returns the exit code to give the process.
+            ///
+            /// A help or version request is printed to @p out; anything else goes to
+            /// @p err.
+            ///
+            /// @param e The error to report.
+            /// @param out The stream used for successful early exits.
+            /// @param err The stream used for failures.
+            /// @return The process exit code.
+            auto exit(const error_t &e, std::ostream &out = std::cout, std::ostream &err = std::cerr) const -> int;
 
             ///@}
             /// @name Post parsing
             ///@{
 
-            /// Counts the number of times the given option was passed.
-            [[nodiscard]] std::size_t count(std::string option_name) const
+            /// @brief Returns how many times an option was used.
+            ///
+            /// @param option_name The option to look up.
+            /// @return The use count.
+            /// @throws cli::option_not_found_t If no option matches.
+            [[nodiscard]] auto count(std::string option_name) const -> std::size_t
             {
                 return get_option(option_name)->count();
             }
 
-            /// Get a subcommand pointer list to the currently selected subcommands (after parsing by default, in
-            /// command line order; use parsed = false to get the original definition list.)
-            [[nodiscard]] std::vector<App *> get_subcommands() const
+            /// @brief Returns the subcommands that were used, in command-line order.
+            ///
+            /// @return The parsed subcommands.
+            [[nodiscard]] auto get_subcommands() const -> const std::vector<app_t *> &
             {
                 return parsed_subcommands_;
             }
 
-            /// Get a filtered subcommand pointer list from the original definition list. An empty function will provide
-            /// all subcommands (const)
-            std::vector<const App *> get_subcommands(const std::function<bool(const App *)> &filter) const;
+            /// @brief Returns the subcommands matching a filter, as defined.
+            ///
+            /// @param filter Selects which subcommands to return; empty returns all.
+            /// @return The matching subcommands.
+            auto get_subcommands(const std::function<bool(const app_t *)> &filter) const
+                -> std::vector<const app_t *>;
 
-            /// Get a filtered subcommand pointer list from the original definition list. An empty function will provide
-            /// all subcommands
-            std::vector<App *> get_subcommands(const std::function<bool(App *)> &filter);
+            /// @brief Returns the subcommands matching a filter, as defined.
+            ///
+            /// @param filter Selects which subcommands to return; empty returns all.
+            /// @return The matching subcommands.
+            auto get_subcommands(const std::function<bool(app_t *)> &filter) -> std::vector<app_t *>;
 
-            /// Check to see if given subcommand was selected
-            bool got_subcommand(const App *subcom) const
+            /// @brief Reports whether a subcommand was used.
+            ///
+            /// @param subcom The subcommand to check.
+            /// @return `true` if it was used.
+            /// @throws cli::option_not_found_t If it is not a subcommand of this application.
+            auto got_subcommand(const app_t *subcom) const -> bool
             {
-                // get subcom needed to verify that this was a real subcommand
+                // Routed through get_subcommand so that an unrelated pointer is reported
+                // rather than silently answering false.
                 return get_subcommand(subcom)->parsed_ > 0;
             }
 
-            /// Check with name instead of pointer to see if subcommand was selected
-            [[nodiscard]] bool got_subcommand(std::string subcommand_name) const noexcept
+            /// @brief Reports whether a named subcommand was used.
+            ///
+            /// @param subcommand_name The subcommand to check.
+            /// @return `true` if it exists and was used.
+            [[nodiscard]] auto got_subcommand(std::string subcommand_name) const noexcept -> bool
             {
-                App *sub = get_subcommand_no_throw(subcommand_name);
+                const app_t *sub = get_subcommand_no_throw(std::move(subcommand_name));
                 return (sub != nullptr) ? (sub->parsed_ > 0) : false;
             }
 
-            /// Sets excluded options for the subcommand
-            App *excludes(Option *opt)
+            /// @brief Forbids an option from being used alongside this subcommand.
+            ///
+            /// @param opt The option to exclude.
+            /// @return A pointer to this application, for chaining.
+            /// @throws cli::option_not_found_t If @p opt is null.
+            auto excludes(option_t *opt) -> app_t *
             {
                 if (opt == nullptr)
                 {
-                    throw OptionNotFound("nullptr passed");
+                    throw option_not_found_t("nullptr passed");
                 }
                 exclude_options_.insert(opt);
                 return this;
             }
 
-            /// Sets excluded subcommands for the subcommand
-            App *excludes(App *app)
+            /// @brief Forbids a subcommand from being used alongside this one.
+            ///
+            /// The exclusion is recorded on both subcommands.
+            ///
+            /// @param app The subcommand to exclude.
+            /// @return A pointer to this application, for chaining.
+            /// @throws cli::option_not_found_t If @p app is null or is this application.
+            auto excludes(app_t *app) -> app_t *
             {
                 if (app == nullptr)
                 {
-                    throw OptionNotFound("nullptr passed");
+                    throw option_not_found_t("nullptr passed");
                 }
                 if (app == this)
                 {
-                    throw OptionNotFound("cannot self reference in needs");
+                    throw option_not_found_t("cannot self reference in needs");
                 }
                 auto res = exclude_subcommands_.insert(app);
-                // subcommand exclusion should be symmetric
                 if (res.second)
                 {
                     app->exclude_subcommands_.insert(this);
@@ -1126,759 +1580,1149 @@ export namespace CLI
                 return this;
             }
 
-            App *needs(Option *opt)
+            /// @brief Requires an option to be used alongside this subcommand.
+            ///
+            /// Not mutual: the option does not come to require this subcommand.
+            ///
+            /// @param opt The required option.
+            /// @return A pointer to this application, for chaining.
+            /// @throws cli::option_not_found_t If @p opt is null.
+            auto needs(option_t *opt) -> app_t *
             {
                 if (opt == nullptr)
                 {
-                    throw OptionNotFound("nullptr passed");
+                    throw option_not_found_t("nullptr passed");
                 }
                 need_options_.insert(opt);
                 return this;
             }
 
-            App *needs(App *app)
+            /// @brief Requires a subcommand to be used alongside this one.
+            ///
+            /// Not mutual.
+            ///
+            /// @param app The required subcommand.
+            /// @return A pointer to this application, for chaining.
+            /// @throws cli::option_not_found_t If @p app is null or is this application.
+            auto needs(app_t *app) -> app_t *
             {
                 if (app == nullptr)
                 {
-                    throw OptionNotFound("nullptr passed");
+                    throw option_not_found_t("nullptr passed");
                 }
                 if (app == this)
                 {
-                    throw OptionNotFound("cannot self reference in needs");
+                    throw option_not_found_t("cannot self reference in needs");
                 }
                 need_subcommands_.insert(app);
                 return this;
             }
 
-            /// Removes an option from the excludes list of this subcommand
-            bool remove_excludes(Option *opt);
+            /// @brief Drops an option exclusion.
+            ///
+            /// @param opt The option to stop excluding.
+            /// @return `true` if the exclusion was present.
+            auto remove_excludes(option_t *opt) -> bool;
 
-            /// Removes a subcommand from the excludes list of this subcommand
-            bool remove_excludes(App *app);
+            /// @brief Drops a subcommand exclusion.
+            ///
+            /// @param app The subcommand to stop excluding.
+            /// @return `true` if the exclusion was present.
+            auto remove_excludes(app_t *app) -> bool;
 
-            /// Removes an option from the needs list of this subcommand
-            bool remove_needs(Option *opt);
+            /// @brief Drops an option requirement.
+            ///
+            /// @param opt The option to stop requiring.
+            /// @return `true` if the requirement was present.
+            auto remove_needs(option_t *opt) -> bool;
 
-            /// Removes a subcommand from the needs list of this subcommand
-            bool remove_needs(App *app);
+            /// @brief Drops a subcommand requirement.
+            ///
+            /// @param app The subcommand to stop requiring.
+            /// @return `true` if the requirement was present.
+            auto remove_needs(app_t *app) -> bool;
+
             ///@}
             /// @name Help
             ///@{
 
-            /// Set usage.
-            App *usage(std::string usage_string)
+            /// @brief Sets the usage line shown after the description.
+            ///
+            /// @param usage_string The usage line.
+            /// @return A pointer to this application, for chaining.
+            auto usage(std::string usage_string) -> app_t *
             {
                 usage_ = std::move(usage_string);
                 return this;
             }
-            /// Set usage.
-            App *usage(std::function<std::string()> usage_function)
+
+            /// @brief Sets a callable producing the usage line.
+            ///
+            /// @param usage_function Produces the usage line.
+            /// @return A pointer to this application, for chaining.
+            auto usage(std::function<std::string()> usage_function) -> app_t *
             {
                 usage_callback_ = std::move(usage_function);
                 return this;
             }
-            /// Set footer.
-            App *footer(std::string footer_string)
+
+            /// @brief Sets the footer shown after all options.
+            ///
+            /// @param footer_string The footer text.
+            /// @return A pointer to this application, for chaining.
+            auto footer(std::string footer_string) -> app_t *
             {
                 footer_ = std::move(footer_string);
                 return this;
             }
-            /// Set footer.
-            App *footer(std::function<std::string()> footer_function)
+
+            /// @brief Sets a callable producing the footer.
+            ///
+            /// @param footer_function Produces the footer text.
+            /// @return A pointer to this application, for chaining.
+            auto footer(std::function<std::string()> footer_function) -> app_t *
             {
                 footer_callback_ = std::move(footer_function);
                 return this;
             }
-            /// Produce a string that could be read in as a config of the current values of the App. Set default_also to
-            /// include default arguments. write_descriptions will print a description for the App and for each option.
-            [[nodiscard]] std::string config_to_str() const
+
+            /// @brief Writes the current values out as configuration text.
+            ///
+            /// @return The configuration text, covering only options that were set.
+            [[nodiscard]] auto config_to_str() const -> std::string
             {
-                return config_to_str(ConfigOutputMode::Active, false);
+                return config_to_str(config_output_mode_t::active, false);
             }
 
-            /// Produce a string that could be read in as a config of the current values of the App.
-            [[nodiscard]] std::string config_to_str(ConfigOutputMode mode, bool write_description = false) const
+            /// @brief Writes the current values out as configuration text.
+            ///
+            /// @param mode How much of the application to write.
+            /// @param write_description Include descriptions as comments.
+            /// @return The configuration text.
+            [[nodiscard]] auto config_to_str(config_output_mode_t mode,
+                                             bool write_description = false) const -> std::string
             {
                 return config_formatter_->to_config(this, mode, write_description, "");
             }
 
-            /// Produce a string that could be read in as a config of the current values of the App. Set default_also to
-            /// include default arguments. write_descriptions will print a description for the App and for each option.
-            /// This will be deprecated soon, use the version that takes a ConfigOutputMode instead.
-            [[nodiscard]] std::string config_to_str(bool default_also, bool write_description = false) const
+            /// @brief Writes the current values out as configuration text.
+            ///
+            /// @deprecated Use the @ref config_output_mode_t overload instead.
+            ///
+            /// @param default_also Include options left at their defaults.
+            /// @param write_description Include descriptions as comments.
+            /// @return The configuration text.
+            [[nodiscard]] auto config_to_str(bool default_also,
+                                             bool write_description = false) const -> std::string
             {
-                return config_to_str(default_also ? ConfigOutputMode::AllDefaults : ConfigOutputMode::Active,
-                                     write_description);
+                return config_to_str(
+                    default_also ? config_output_mode_t::all_defaults : config_output_mode_t::active,
+                    write_description);
             }
 
-            /// Makes a help message, using the currently configured formatter
-            /// Will only do one subcommand at a time
-            [[nodiscard]] std::string help(std::string prev = "", AppFormatMode mode = AppFormatMode::Normal) const;
+            /// @brief Renders the help page using the configured formatter.
+            ///
+            /// Covers one subcommand at a time.
+            ///
+            /// @param prev The name to present this application under.
+            /// @param mode How much detail to include.
+            /// @return The rendered help page.
+            [[nodiscard]] auto help(std::string prev = "",
+                                    app_format_mode_t mode = app_format_mode_t::normal) const -> std::string;
 
-            /// Displays a version string
-            [[nodiscard]] std::string version() const;
+            /// @brief Renders the version string.
+            ///
+            /// @return The version text.
+            [[nodiscard]] auto version() const -> std::string;
+
             ///@}
             /// @name Getters
             ///@{
 
-            /// Access the formatter
-            [[nodiscard]] std::shared_ptr<FormatterBase> get_formatter() const
+            /// @brief Returns the help formatter.
+            ///
+            /// @return A shared handle to the formatter.
+            [[nodiscard]] auto get_formatter() const -> std::shared_ptr<formatter_base_t>
             {
                 return formatter_;
             }
 
-            /// Access the config formatter
-            [[nodiscard]] std::shared_ptr<Config> get_config_formatter() const
+            /// @brief Returns the configuration reader and writer.
+            ///
+            /// @return A shared handle to the converter.
+            [[nodiscard]] auto get_config_formatter() const -> std::shared_ptr<config_t>
             {
                 return config_formatter_;
             }
 
-            /// Access the config formatter as a configBase pointer
-            [[nodiscard]] std::shared_ptr<ConfigBase> get_config_formatter_base() const
+            /// @brief Returns the configuration converter as a @ref config_base_t.
+            ///
+            /// @return A shared handle to the converter, or empty if it is not a
+            /// @ref config_base_t.
+            [[nodiscard]] auto get_config_formatter_base() const -> std::shared_ptr<config_base_t>
             {
-                // This is safer as a dynamic_cast if we have RTTI, as Config -> ConfigBase
-                return std::dynamic_pointer_cast<ConfigBase>(config_formatter_);
+                return std::dynamic_pointer_cast<config_base_t>(config_formatter_);
             }
 
-            /// Get the app or subcommand description
-            [[nodiscard]] std::string get_description() const
+            /// @brief Returns the description shown in help output.
+            ///
+            /// @return The description.
+            [[nodiscard]] auto get_description() const -> const std::string &
             {
                 return description_;
             }
 
-            /// Set the description of the app
-            App *description(std::string app_description)
+            /// @brief Sets the description shown in help output.
+            ///
+            /// @param app_description The description.
+            /// @return A pointer to this application, for chaining.
+            auto description(std::string app_description) -> app_t *
             {
                 description_ = std::move(app_description);
                 return this;
             }
 
-            /// Get the list of options (user facing function, so returns raw pointers), has optional filter function
-            std::vector<const Option *> get_options(const std::function<bool(const Option *)> filter = {}) const;
+            /// @brief Returns the options matching a filter.
+            ///
+            /// @param filter Selects which options to return; empty returns all.
+            /// @return The matching options.
+            [[nodiscard]] auto get_options(const std::function<bool(const option_t *)> &filter = {})
+                const -> std::vector<const option_t *>;
 
-            /// Non-const version of the above
-            std::vector<Option *> get_options(const std::function<bool(Option *)> filter = {});
+            /// @brief Returns the options matching a filter.
+            ///
+            /// @param filter Selects which options to return; empty returns all.
+            /// @return The matching options.
+            [[nodiscard]] auto get_options(const std::function<bool(option_t *)> &filter = {})
+                -> std::vector<option_t *>;
 
-            /// Get an option by name (noexcept non-const version)
-            [[nodiscard]] Option *get_option_no_throw(std::string option_name) noexcept;
+            /// @brief Finds an option by name, without throwing.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option, or `nullptr` if none matches.
+            [[nodiscard]] auto get_option_no_throw(std::string option_name) noexcept -> option_t *;
 
-            /// Get an option by name (noexcept const version)
-            [[nodiscard]] const Option *get_option_no_throw(std::string option_name) const noexcept;
+            /// @brief Finds an option by name, without throwing.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option, or `nullptr` if none matches.
+            [[nodiscard]] auto get_option_no_throw(std::string option_name) const noexcept -> const option_t *;
 
-            /// Get an option by name
-            [[nodiscard]] const Option *get_option(std::string option_name) const;
+            /// @brief Finds an option by name.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option.
+            /// @throws cli::option_not_found_t If no option matches.
+            [[nodiscard]] auto get_option(std::string option_name) const -> const option_t *;
 
-            /// Get an option by name (non-const version)
-            [[nodiscard]] Option *get_option(std::string option_name);
+            /// @brief Finds an option by name.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option.
+            /// @throws cli::option_not_found_t If no option matches.
+            [[nodiscard]] auto get_option(std::string option_name) -> option_t *;
 
-            /// Shortcut bracket operator for getting a pointer to an option
-            const Option *operator[](const std::string &option_name) const
+            /// @brief Finds an option by name.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option.
+            /// @throws cli::option_not_found_t If no option matches.
+            [[nodiscard]] auto operator[](const std::string &option_name) const -> const option_t *
             {
                 return get_option(option_name);
             }
 
-            /// Shortcut bracket operator for getting a pointer to an option
-            const Option *operator[](const char *option_name) const
+            /// @brief Finds an option by name.
+            ///
+            /// @param option_name The name to look for.
+            /// @return A pointer to the option.
+            /// @throws cli::option_not_found_t If no option matches.
+            [[nodiscard]] auto operator[](const char *option_name) const -> const option_t *
             {
                 return get_option(option_name);
             }
 
-            /// Check the status of ignore_case
-            [[nodiscard]] bool get_ignore_case() const
+            /// @brief Reports whether name matching ignores case.
+            ///
+            /// @return `true` if case is ignored.
+            [[nodiscard]] auto get_ignore_case() const -> bool
             {
                 return ignore_case_;
             }
 
-            /// Check the status of ignore_underscore
-            [[nodiscard]] bool get_ignore_underscore() const
+            /// @brief Reports whether name matching ignores underscores.
+            ///
+            /// @return `true` if underscores are ignored.
+            [[nodiscard]] auto get_ignore_underscore() const -> bool
             {
                 return ignore_underscore_;
             }
 
-            /// Check the status of fallthrough
-            [[nodiscard]] bool get_fallthrough() const
+            /// @brief Reports whether options fall through to the parent command.
+            ///
+            /// @return `true` if fallthrough is enabled.
+            [[nodiscard]] auto get_fallthrough() const -> bool
             {
                 return fallthrough_;
             }
 
-            /// Check the status of subcommand fallthrough
-            [[nodiscard]] bool get_subcommand_fallthrough() const
+            /// @brief Reports whether a parent's subcommands are recognised here.
+            ///
+            /// @return `true` if subcommand fallthrough is enabled.
+            [[nodiscard]] auto get_subcommand_fallthrough() const -> bool
             {
                 return subcommand_fallthrough_;
             }
 
-            /// Check the status of the allow windows style options
-            [[nodiscard]] bool get_allow_windows_style_options() const
+            /// @brief Reports whether Windows-style options are accepted.
+            ///
+            /// @return `true` if `/opt` is accepted.
+            [[nodiscard]] auto get_allow_windows_style_options() const -> bool
             {
                 return allow_windows_style_options_;
             }
 
-            /// Check the status of the allow windows style options
-            [[nodiscard]] bool get_positionals_at_end() const
+            /// @brief Reports whether positionals must appear after every option.
+            ///
+            /// @return `true` if positionals come last.
+            [[nodiscard]] auto get_positionals_at_end() const -> bool
             {
                 return positionals_at_end_;
             }
 
-            /// Check the status of the allow windows style options
-            [[nodiscard]] bool get_configurable() const
+            /// @brief Reports whether this subcommand can be triggered from a configuration file.
+            ///
+            /// @return `true` if it is configurable.
+            [[nodiscard]] auto get_configurable() const -> bool
             {
                 return configurable_;
             }
 
-            /// Get the group of this subcommand
-            [[nodiscard]] const std::string &get_group() const
+            /// @brief Returns the help group this subcommand is listed under.
+            ///
+            /// @return The group name.
+            [[nodiscard]] auto get_group() const -> const std::string &
             {
                 return group_;
             }
 
-            /// Generate and return the usage.
-            [[nodiscard]] std::string get_usage() const
+            /// @brief Returns the usage line.
+            ///
+            /// When a usage callback is set, its output precedes any fixed usage text.
+            ///
+            /// @return The usage line.
+            [[nodiscard]] auto get_usage() const -> std::string
             {
                 return (usage_callback_) ? usage_callback_() + '\n' + usage_ : usage_;
             }
 
-            /// Generate and return the footer.
-            [[nodiscard]] std::string get_footer() const
+            /// @brief Returns the footer.
+            ///
+            /// When a footer callback is set, its output precedes any fixed footer text.
+            ///
+            /// @return The footer.
+            [[nodiscard]] auto get_footer() const -> std::string
             {
                 return (footer_callback_) ? footer_callback_() + '\n' + footer_ : footer_;
             }
 
-            /// Get the required min subcommand value
-            [[nodiscard]] std::size_t get_require_subcommand_min() const
+            /// @brief Returns the smallest number of subcommands that must be used.
+            ///
+            /// @return The count.
+            [[nodiscard]] auto get_require_subcommand_min() const -> std::size_t
             {
                 return require_subcommand_min_;
             }
 
-            /// Get the required max subcommand value
-            [[nodiscard]] std::size_t get_require_subcommand_max() const
+            /// @brief Returns the largest number of subcommands accepted.
+            ///
+            /// @return The count; `0` means unlimited.
+            [[nodiscard]] auto get_require_subcommand_max() const -> std::size_t
             {
                 return require_subcommand_max_;
             }
 
-            /// Get the required min option value
-            [[nodiscard]] std::size_t get_require_option_min() const
+            /// @brief Returns the smallest number of options that must be used.
+            ///
+            /// @return The count.
+            [[nodiscard]] auto get_require_option_min() const -> std::size_t
             {
                 return require_option_min_;
             }
 
-            /// Get the required max option value
-            [[nodiscard]] std::size_t get_require_option_max() const
+            /// @brief Returns the largest number of options accepted.
+            ///
+            /// @return The count; `0` means unlimited.
+            [[nodiscard]] auto get_require_option_max() const -> std::size_t
             {
                 return require_option_max_;
             }
 
-            /// Get the prefix command status
-            [[nodiscard]] bool get_prefix_command() const
+            /// @brief Reports whether parsing stops at an unrecognised argument.
+            ///
+            /// @return `true` if prefix-command mode is enabled in any form.
+            [[nodiscard]] auto get_prefix_command() const -> bool
             {
-                return static_cast<bool>(prefix_command_);
+                return prefix_command_ != prefix_command_mode_t::off;
             }
 
-            /// Get the prefix command status
-            [[nodiscard]] PrefixCommandMode get_prefix_command_mode() const
+            /// @brief Returns when parsing stops early.
+            ///
+            /// @return The prefix-command mode.
+            [[nodiscard]] auto get_prefix_command_mode() const -> prefix_command_mode_t
             {
                 return prefix_command_;
             }
 
-            /// Get the status of allow extras
-            [[nodiscard]] bool get_allow_extras() const
+            /// @brief Reports whether unmatched arguments are accepted.
+            ///
+            /// @return `true` if they are captured rather than reported.
+            [[nodiscard]] auto get_allow_extras() const -> bool
             {
-                return allow_extras_ > ExtrasMode::Ignore;
+                return allow_extras_ > extras_mode_t::ignore;
             }
 
-            /// Get the mode of allow_extras
-            [[nodiscard]] ExtrasMode get_allow_extras_mode() const
+            /// @brief Returns what happens to unmatched arguments.
+            ///
+            /// @return The extras mode.
+            [[nodiscard]] auto get_allow_extras_mode() const -> extras_mode_t
             {
                 return allow_extras_;
             }
 
-            /// Get the status of required
-            [[nodiscard]] bool get_required() const
+            /// @brief Reports whether this subcommand must be used.
+            ///
+            /// @return `true` if it is required.
+            [[nodiscard]] auto get_required() const -> bool
             {
                 return required_;
             }
 
-            /// Get the status of disabled
-            [[nodiscard]] bool get_disabled() const
+            /// @brief Reports whether this subcommand is disabled.
+            ///
+            /// @return `true` if it is disabled.
+            [[nodiscard]] auto get_disabled() const -> bool
             {
                 return disabled_;
             }
 
-            /// Get the status of silence
-            [[nodiscard]] bool get_silent() const
+            /// @brief Reports whether this subcommand is hidden from the processed list.
+            ///
+            /// @return `true` if it is hidden.
+            [[nodiscard]] auto get_silent() const -> bool
             {
                 return silent_;
             }
 
-            /// Get the status of allowing non standard option names
-            [[nodiscard]] bool get_allow_non_standard_option_names() const
+            /// @brief Reports whether non-standard option names are accepted.
+            ///
+            /// @return `true` if they are accepted.
+            [[nodiscard]] auto get_allow_non_standard_option_names() const -> bool
             {
                 return allow_non_standard_options_;
             }
 
-            /// Get the status of allowing prefix matching for subcommands
-            [[nodiscard]] bool get_allow_subcommand_prefix_matching() const
+            /// @brief Reports whether subcommands may be matched by a name prefix.
+            ///
+            /// @return `true` if prefix matching is enabled.
+            [[nodiscard]] auto get_allow_subcommand_prefix_matching() const -> bool
             {
                 return allow_prefix_matching_;
             }
 
-            /// Get the status of disabled
-            [[nodiscard]] bool get_immediate_callback() const
+            /// @brief Reports whether the callback runs as soon as parsing finishes.
+            ///
+            /// @return `true` if the callback is immediate.
+            [[nodiscard]] auto get_immediate_callback() const -> bool
             {
                 return immediate_callback_;
             }
 
-            /// Get the status of disabled by default
-            [[nodiscard]] bool get_disabled_by_default() const
+            /// @brief Reports whether @ref clear leaves this subcommand disabled.
+            ///
+            /// @return `true` if it is disabled by default.
+            [[nodiscard]] auto get_disabled_by_default() const -> bool
             {
-                return (default_startup == startup_mode::disabled);
+                return (default_startup == startup_mode_t::disabled);
             }
 
-            /// Get the status of disabled by default
-            [[nodiscard]] bool get_enabled_by_default() const
+            /// @brief Reports whether @ref clear leaves this subcommand enabled.
+            ///
+            /// @return `true` if it is enabled by default.
+            [[nodiscard]] auto get_enabled_by_default() const -> bool
             {
-                return (default_startup == startup_mode::enabled);
+                return (default_startup == startup_mode_t::enabled);
             }
-            /// Get the status of validating positionals
-            [[nodiscard]] bool get_validate_positionals() const
+
+            /// @brief Reports whether positionals are validated before assignment.
+            ///
+            /// @return `true` if they are validated first.
+            [[nodiscard]] auto get_validate_positionals() const -> bool
             {
                 return validate_positionals_;
             }
-            /// Get the status of validating optional vector arguments
-            [[nodiscard]] bool get_validate_optional_arguments() const
+
+            /// @brief Reports whether optional vector arguments are validated before assignment.
+            ///
+            /// @return `true` if they are validated first.
+            [[nodiscard]] auto get_validate_optional_arguments() const -> bool
             {
                 return validate_optional_arguments_;
             }
 
-            /// Get the status of allow extras
-            [[nodiscard]] config_extras_mode get_allow_config_extras() const
+            /// @brief Returns what happens to unmatched configuration entries.
+            ///
+            /// @return The configuration extras mode.
+            [[nodiscard]] auto get_allow_config_extras() const -> config_extras_mode_t
             {
-                return static_cast<config_extras_mode>(allow_config_extras_);
+                return allow_config_extras_;
             }
 
-            /// Get a pointer to the help flag.
-            Option *get_help_ptr()
-            {
-                return help_ptr_;
-            }
-
-            /// Get a pointer to the help flag. (const)
-            [[nodiscard]] const Option *get_help_ptr() const
+            /// @brief Returns the help flag.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_help_ptr() -> option_t *
             {
                 return help_ptr_;
             }
 
-            /// Get a pointer to the help all flag. (const)
-            [[nodiscard]] const Option *get_help_all_ptr() const
+            /// @brief Returns the help flag.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_help_ptr() const -> const option_t *
+            {
+                return help_ptr_;
+            }
+
+            /// @brief Returns the expanded-help flag.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_help_all_ptr() const -> const option_t *
             {
                 return help_all_ptr_;
             }
 
-            /// Get a pointer to the config option.
-            Option *get_config_ptr()
+            /// @brief Returns the option naming a configuration file.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_config_ptr() -> option_t *
             {
                 return config_ptr_;
             }
 
-            /// Get a pointer to the config option. (const)
-            [[nodiscard]] const Option *get_config_ptr() const
+            /// @brief Returns the option naming a configuration file.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_config_ptr() const -> const option_t *
             {
                 return config_ptr_;
             }
 
-            /// Get a pointer to the version option.
-            Option *get_version_ptr()
+            /// @brief Returns the version flag.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_version_ptr() -> option_t *
             {
                 return version_ptr_;
             }
 
-            /// Get a pointer to the version option. (const)
-            [[nodiscard]] const Option *get_version_ptr() const
+            /// @brief Returns the version flag.
+            ///
+            /// @return A pointer to the option, or `nullptr` if there is none.
+            [[nodiscard]] auto get_version_ptr() const -> const option_t *
             {
                 return version_ptr_;
             }
 
-            /// Get the parent of this subcommand (or nullptr if main app)
-            App *get_parent()
+            /// @brief Returns the parent application.
+            ///
+            /// @return A pointer to the parent, or `nullptr` for the main application.
+            [[nodiscard]] auto get_parent() -> app_t *
             {
                 return parent_;
             }
 
-            /// Get the parent of this subcommand (or nullptr if main app) (const version)
-            [[nodiscard]] const App *get_parent() const
+            /// @brief Returns the parent application.
+            ///
+            /// @return A pointer to the parent, or `nullptr` for the main application.
+            [[nodiscard]] auto get_parent() const -> const app_t *
             {
                 return parent_;
             }
 
-            /// Get the name of the current app
-            [[nodiscard]] const std::string &get_name() const
+            /// @brief Returns this application's name.
+            ///
+            /// @return The name.
+            [[nodiscard]] auto get_name() const -> const std::string &
             {
                 return name_;
             }
 
-            /// Get the aliases of the current app
-            [[nodiscard]] const std::vector<std::string> &get_aliases() const
+            /// @brief Returns the alternative names this subcommand answers to.
+            ///
+            /// @return The aliases.
+            [[nodiscard]] auto get_aliases() const -> const std::vector<std::string> &
             {
                 return aliases_;
             }
 
-            /// clear all the aliases of the current App
-            App *clear_aliases()
+            /// @brief Removes every alias.
+            ///
+            /// @return A pointer to this application, for chaining.
+            auto clear_aliases() -> app_t *
             {
                 aliases_.clear();
                 return this;
             }
 
-            /// Get a display name for an app
-            [[nodiscard]] std::string get_display_name(bool with_aliases = false) const;
+            /// @brief Returns the name shown in help output.
+            ///
+            /// @param with_aliases Include the aliases alongside the name.
+            /// @return The display name.
+            [[nodiscard]] auto get_display_name(bool with_aliases = false) const -> std::string;
 
-            /// Check the name, case-insensitive and underscore insensitive, and prefix matching if set
-            /// @return true if matched
-            [[nodiscard]] bool check_name(std::string name_to_check) const;
+            /// @brief Reports whether a name refers to this subcommand.
+            ///
+            /// Honours the case, underscore, and prefix-matching settings.
+            ///
+            /// @param name_to_check The name to test.
+            /// @return `true` if it matches.
+            [[nodiscard]] auto check_name(std::string name_to_check) const -> bool;
 
-            /// @brief  enumeration of matching possibilities
-            enum class NameMatch : std::uint8_t
+            /// @brief How closely a name matched.
+            enum class name_match_t : std::uint8_t
             {
-                none = 0,
-                exact = 1,
-                prefix = 2
+                none = 0,  ///< No match.
+                exact = 1, ///< The name matched in full.
+                prefix = 2 ///< The name matched a prefix, and prefix matching is enabled.
             };
 
-            /// Check the name, case-insensitive and underscore insensitive if set
-            /// @return NameMatch::none if no match, NameMatch::exact if the match is exact NameMatch::prefix if prefix
-            /// is enabled and a prefix matches
-            [[nodiscard]] NameMatch check_name_detail(std::string name_to_check) const;
+            /// @brief Reports how closely a name matches this subcommand.
+            ///
+            /// Honours the case and underscore settings.
+            ///
+            /// @param name_to_check The name to test.
+            /// @return How closely it matched.
+            [[nodiscard]] auto check_name_detail(std::string name_to_check) const -> name_match_t;
 
-            /// Get the groups available directly from this option (in order)
-            [[nodiscard]] std::vector<std::string> get_groups() const;
+            /// @brief Returns the option groups defined here, in definition order.
+            ///
+            /// @return The group names.
+            [[nodiscard]] auto get_groups() const -> std::vector<std::string>;
 
-            /// This gets a vector of pointers with the original parse order
-            [[nodiscard]] const std::vector<Option *> &parse_order() const
+            /// @brief Returns the options that were used, in command-line order.
+            ///
+            /// @return The options, in the order they appeared.
+            [[nodiscard]] auto parse_order() const -> const std::vector<option_t *> &
             {
                 return parse_order_;
             }
 
-            /// This returns the missing options from the current subcommand
-            [[nodiscard]] std::vector<std::string> remaining(bool recurse = false) const;
+            /// @brief Returns the arguments that matched nothing.
+            ///
+            /// @param recurse Include the arguments left over by subcommands.
+            /// @return The unmatched arguments.
+            [[nodiscard]] auto remaining(bool recurse = false) const -> std::vector<std::string>;
 
-            /// This returns the missing options in a form ready for processing by another command line program
-            [[nodiscard]] std::vector<std::string> remaining_for_passthrough(bool recurse = false) const;
+            /// @brief Returns the unmatched arguments, ready to hand to another program.
+            ///
+            /// @param recurse Include the arguments left over by subcommands.
+            /// @return The unmatched arguments, in command-line order.
+            [[nodiscard]] auto remaining_for_passthrough(bool recurse = false) const -> std::vector<std::string>;
 
-            /// This returns the number of remaining options, minus the -- separator
-            [[nodiscard]] std::size_t remaining_size(bool recurse = false) const;
+            /// @brief Returns how many arguments matched nothing, excluding the `--` separator.
+            ///
+            /// @param recurse Include the arguments left over by subcommands.
+            /// @return The count.
+            [[nodiscard]] auto remaining_size(bool recurse = false) const -> std::size_t;
 
             ///@}
 
         protected:
-            /// Check the options to make sure there are no conflicts.
+            /// @brief Checks the option set for conflicts.
             ///
-            /// Currently checks to see if multiple positionals exist with unlimited args and checks if the min and max
-            /// options are feasible
-            void _validate() const;
-
-            /// configure subcommands to enable parsing through the current object
-            /// set the correct fallthrough and prefix for nameless subcommands and manage the automatic enable or
-            /// disable makes sure parent is set correctly
-            void _configure();
-
-            /// Internal function to run (App) callback, bottom up
-            void run_callback(bool final_mode = false, bool suppress_final_callback = false);
-
-            /// Check to see if a subcommand is valid. Give up immediately if subcommand max has been reached.
-            [[nodiscard]] bool _valid_subcommand(const std::string &current, bool ignore_used = true) const;
-
-            /// Selects a Classifier enum based on the type of the current argument
-            [[nodiscard]] detail::Classifier _recognize(const std::string &current,
-                                                        bool ignore_used_subcommands = true) const;
-
-            // The parse function is now broken into several parts, and part of process
-
-            /// Read and process a configuration file (main app only)
-            void _process_config_file();
-
-            /// Read and process a particular configuration file
-            bool _process_config_file(const std::string &config_file, bool throw_error);
-
-            /// Get envname options if not yet passed. Runs on *all* subcommands.
-            void _process_env();
-
-            /// Process callbacks. Runs on *all* subcommands.
-            void _process_callbacks(CallbackPriority priority);
-
-            /// Run help flag processing if any are found.
+            /// Looks for more than one positional taking unlimited arguments, and for
+            /// minimum and maximum counts that cannot both be satisfied.
             ///
-            /// The flags allow recursive calls to remember if there was a help flag on a parent.
-            void _process_help_flags(CallbackPriority priority,
-                                     bool trigger_help = false,
-                                     bool trigger_all_help = false) const;
+            /// @throws cli::invalid_error_t If the option set cannot work.
+            auto _validate() const -> void;
 
-            /// Verify required options and cross requirements. Subcommands too (only if selected).
-            void _process_requirements();
-
-            /// Process callbacks and such.
-            void _process();
-
-            /// Throw an error if anything is left over and should not be.
-            void _process_extras();
-
-            /// Internal function to recursively increment the parsed counter on the current app as well unnamed
-            /// subcommands
-            void increment_parsed();
-
-            /// Internal parse function
-            void _parse(std::vector<std::string> &args);
-
-            /// Internal parse function
-            void _parse(std::vector<std::string> &&args);
-
-            /// Internal function to parse a stream
-            void _parse_stream(std::istream &input);
-
-            /// Parse one config param, return false if not found in any subcommand, remove if it is
+            /// @brief Prepares the subcommand tree for parsing.
             ///
-            /// If this has more than one dot.separated.name, go into the subcommand matching it
-            /// Returns true if it managed to find the option, if false you'll need to remove the arg manually.
-            void _parse_config(const std::vector<ConfigItem> &args);
+            /// Sets fallthrough and prefix behaviour on nameless subcommands, applies the
+            /// automatic enable or disable, and fixes up parent pointers.
+            auto _configure() -> void;
 
-            /// Fill in a single config option
-            bool _parse_single_config(const ConfigItem &item, std::size_t level = 0);
-
-            /// @brief store the results for a flag like option
-            bool _add_flag_like_result(Option *op, const ConfigItem &item, const std::vector<std::string> &inputs);
-
-            /// Parse "one" argument (some may eat more than one), delegate to parent if fails, add to missing if
-            /// missing from main return false if the parse has failed and needs to return to parent
-            bool _parse_single(std::vector<std::string> &args, bool &positional_only);
-
-            /// Count the required remaining positional arguments
-            [[nodiscard]] std::size_t _count_remaining_positionals(bool required_only = false) const;
-
-            /// Count the required remaining positional arguments
-            [[nodiscard]] bool _has_remaining_positionals() const;
-
-            /// Parse a positional, go up the tree to check
-            /// @param haltOnSubcommand if set to true the operation will not process subcommands merely return false
-            /// Return true if the positional was used false otherwise
-            bool _parse_positional(std::vector<std::string> &args, bool haltOnSubcommand);
-
-            /// Locate a subcommand by name with two conditions, should disabled subcommands be ignored, and should used
-            /// subcommands be ignored
-            [[nodiscard]] App *_find_subcommand(const std::string &subc_name,
-                                                bool ignore_disabled,
-                                                bool ignore_used) const noexcept;
-
-            /// Parse a subcommand, modify args and continue
+            /// @brief Runs this application's callback, and its subcommands', bottom up.
             ///
-            /// Unlike the others, this one will always allow fallthrough
-            /// return true if the subcommand was processed false otherwise
-            bool _parse_subcommand(std::vector<std::string> &args);
+            /// @param final_mode Run the final callbacks rather than the parse-complete ones.
+            /// @param suppress_final_callback Skip this application's own final callback.
+            auto run_callback(bool final_mode = false, bool suppress_final_callback = false) -> void;
 
-            /// Parse a short (false) or long (true) argument, must be at the top of the list
-            /// if local_processing_only is set to true then fallthrough is disabled will return false if not found
-            /// return true if the argument was processed or false if nothing was done
-            bool _parse_arg(std::vector<std::string> &args,
-                            detail::Classifier current_type,
-                            bool local_processing_only);
+            /// @brief Reports whether a token names a usable subcommand.
+            ///
+            /// Gives up immediately once the subcommand maximum has been reached.
+            ///
+            /// @param current The token to test.
+            /// @param ignore_used Skip subcommands that were already used.
+            /// @return `true` if the token names a usable subcommand.
+            [[nodiscard]] auto _valid_subcommand(const std::string &current, bool ignore_used = true) const -> bool;
 
-            /// Trigger the pre_parse callback if needed
-            void _trigger_pre_parse(std::size_t remaining_args);
+            /// @brief Classifies one command-line argument.
+            ///
+            /// @param current The argument to classify.
+            /// @param ignore_used_subcommands Skip subcommands that were already used.
+            /// @return What the argument looks like.
+            [[nodiscard]] auto _recognize(const std::string &current,
+                                          bool ignore_used_subcommands = true) const -> detail::classifier_t;
 
-            /// Get the appropriate parent to fallthrough to which is the first one that has a name or the main app
-            [[nodiscard]] App *_get_fallthrough_parent() noexcept;
+            // Parsing is split into the phases below; _process drives them in order.
 
-            /// Get the appropriate parent to fallthrough to which is the first one that has a name or the main app
-            [[nodiscard]] const App *_get_fallthrough_parent() const noexcept;
+            /// @brief Reads and applies the configuration file. Main application only.
+            auto _process_config_file() -> void;
 
-            /// Helper function to run through all possible comparisons of subcommand names to check there is no overlap
-            [[nodiscard]] const std::string &_compare_subcommand_names(const App &subcom, const App &base) const;
+            /// @brief Reads and applies one configuration file.
+            ///
+            /// @param config_file The path to read.
+            /// @param throw_error Report an error when the file cannot be read.
+            /// @return `true` if the file was read.
+            auto _process_config_file(const std::string &config_file, bool throw_error) -> bool;
 
-            /// Helper function to place extra values in the most appropriate position
-            void _move_to_missing(detail::Classifier val_type, const std::string &val);
+            /// @brief Fills options from environment variables. Runs on every subcommand.
+            auto _process_env() -> void;
+
+            /// @brief Runs the option callbacks at one priority. Runs on every subcommand.
+            ///
+            /// @param priority Which callbacks to run.
+            auto _process_callbacks(callback_priority_t priority) -> void;
+
+            /// @brief Handles any help flags that were used.
+            ///
+            /// The flags let a recursive call remember that a parent already saw one.
+            ///
+            /// @param priority Which callbacks are being run.
+            /// @param trigger_help Whether a parent saw the help flag.
+            /// @param trigger_all_help Whether a parent saw the expanded-help flag.
+            auto _process_help_flags(callback_priority_t priority, bool trigger_help = false,
+                                     bool trigger_all_help = false) const -> void;
+
+            /// @brief Checks required options and cross-requirements, including selected subcommands.
+            auto _process_requirements() -> void;
+
+            /// @brief Runs every post-parse phase in order.
+            auto _process() -> void;
+
+            /// @brief Reports anything left over that should not be.
+            auto _process_extras() -> void;
+
+            /// @brief Increments the parse counter here and on nameless subcommands.
+            auto increment_parsed() -> void;
+
+            /// @brief Parses a list of arguments.
+            ///
+            /// @param[in,out] args The arguments, last one first.
+            auto _parse(std::vector<std::string> &args) -> void;
+
+            /// @brief Parses a list of arguments.
+            ///
+            /// @param args The arguments, last one first.
+            auto _parse(std::vector<std::string> &&args) -> void;
+
+            /// @brief Parses a stream as a configuration file.
+            ///
+            /// @param input The stream to read.
+            auto _parse_stream(std::istream &input) -> void;
+
+            /// @brief Applies a set of configuration entries.
+            ///
+            /// An entry whose name contains a separator is routed into the matching
+            /// subcommand.
+            ///
+            /// @param args The entries to apply.
+            auto _parse_config(const std::vector<config_item_t> &args) -> void;
+
+            /// @brief Applies one configuration entry.
+            ///
+            /// @param item The entry to apply.
+            /// @param level How many section levels have been descended.
+            /// @return `true` if a matching option was found.
+            auto _parse_single_config(const config_item_t &item, std::size_t level = 0) -> bool;
+
+            /// @brief Stores a configuration entry against a flag-like option.
+            ///
+            /// @param op The option to fill.
+            /// @param item The entry being applied.
+            /// @param inputs The values from the entry.
+            /// @return `true` if the values were stored.
+            auto _add_flag_like_result(option_t *op, const config_item_t &item,
+                                       const std::vector<std::string> &inputs) -> bool;
+
+            /// @brief Parses one argument, which may consume several.
+            ///
+            /// Delegates to the parent on failure, and records the argument as missing
+            /// if even the main application cannot place it.
+            ///
+            /// @param[in,out] args The remaining arguments, last one first.
+            /// @param[in,out] positional_only Whether the `--` separator has been seen.
+            /// @return `false` if parsing failed and should return to the parent.
+            auto _parse_single(std::vector<std::string> &args, bool &positional_only) -> bool;
+
+            /// @brief Counts the positionals still waiting for values.
+            ///
+            /// @param required_only Count only the required ones.
+            /// @return The count.
+            [[nodiscard]] auto _count_remaining_positionals(bool required_only = false) const -> std::size_t;
+
+            /// @brief Reports whether any positional is still waiting for values.
+            ///
+            /// @return `true` if one is.
+            [[nodiscard]] auto _has_remaining_positionals() const -> bool;
+
+            /// @brief Parses a positional argument, walking up the tree as needed.
+            ///
+            /// @param[in,out] args The remaining arguments, last one first.
+            /// @param[in] halt_on_subcommand Return `false` rather than descending into
+            /// a subcommand.
+            /// @return `true` if the positional was consumed.
+            auto _parse_positional(std::vector<std::string> &args, bool halt_on_subcommand) -> bool;
+
+            /// @brief Finds a subcommand by name.
+            ///
+            /// @param subc_name The name to look for.
+            /// @param ignore_disabled Skip disabled subcommands.
+            /// @param ignore_used Skip subcommands that were already used.
+            /// @return A pointer to the subcommand, or `nullptr` if none matches.
+            [[nodiscard]] auto _find_subcommand(const std::string &subc_name, bool ignore_disabled,
+                                                bool ignore_used) const noexcept -> app_t *;
+
+            /// @brief Parses a subcommand and everything it consumes.
+            ///
+            /// Always allows fallthrough, unlike the other parse helpers.
+            ///
+            /// @param[in,out] args The remaining arguments, last one first.
+            /// @return `true` if a subcommand was processed.
+            auto _parse_subcommand(std::vector<std::string> &args) -> bool;
+
+            /// @brief Parses an option argument sitting at the front of the list.
+            ///
+            /// @param[in,out] args The remaining arguments, last one first.
+            /// @param[in] current_type How the leading argument was classified.
+            /// @param[in] local_processing_only Disable fallthrough, reporting failure instead.
+            /// @return `true` if the argument was consumed.
+            auto _parse_arg(std::vector<std::string> &args, detail::classifier_t current_type,
+                            bool local_processing_only) -> bool;
+
+            /// @brief Runs the pre-parse callback, if it has not already run.
+            ///
+            /// @param remaining_args How many arguments are left to parse.
+            auto _trigger_pre_parse(std::size_t remaining_args) -> void;
+
+            /// @brief Returns the application to fall through to.
+            ///
+            /// The nearest named ancestor, or the main application.
+            ///
+            /// @return A pointer to that application.
+            [[nodiscard]] auto _get_fallthrough_parent() noexcept -> app_t *;
+
+            /// @brief Returns the application to fall through to.
+            ///
+            /// @return A pointer to that application.
+            [[nodiscard]] auto _get_fallthrough_parent() const noexcept -> const app_t *;
+
+            /// @brief Returns the first name two subcommands share.
+            ///
+            /// @param subcom The subcommand being added.
+            /// @param base The subcommand to compare against.
+            /// @return The colliding name, or an empty string if there is none.
+            [[nodiscard]] auto _compare_subcommand_names(const app_t &subcom,
+                                                         const app_t &base) const -> const std::string &;
+
+            /// @brief Records an argument that matched nothing.
+            ///
+            /// @param val_type How the argument was classified.
+            /// @param val The argument itself.
+            auto _move_to_missing(detail::classifier_t val_type, const std::string &val) -> void;
 
         public:
-            /// function that could be used by subclasses of App to shift options around into subcommands
-            void _move_option(Option *opt, App *app);
-    }; // namespace CLI
+            /// @brief Moves an option from one application to another.
+            ///
+            /// Provided for subclasses that reorganise options into subcommands.
+            ///
+            /// @param opt The option to move.
+            /// @param app The application to move it to.
+            auto _move_option(option_t *opt, app_t *app) -> void;
+    };
 
-    /// Extension of App to better manage groups of options
-    class Option_group : public App
+    /// @brief An application specialised for grouping options.
+    ///
+    /// An option group is a subcommand with no name. It groups options in help
+    /// output and can carry its own requirements, but is never named on the command
+    /// line. Create one with @ref app_t::add_option_group.
+    class option_group_t : public app_t
     {
         public:
-            Option_group(std::string group_description, std::string group_name, App *parent)
-                : App(std::move(group_description), "", parent)
+            /// @brief Constructs an option group.
+            ///
+            /// @param group_description The description shown in help output.
+            /// @param group_name The group name.
+            /// @param parent The owning application.
+            option_group_t(std::string group_description, std::string group_name, app_t *parent)
+                : app_t(std::move(group_description), "", parent)
             {
                 group(group_name);
-                // option groups should have automatic fallthrough
+                // A group with no name, or one marked with a leading '+', is merged into
+                // the parent's help output, so it carries no help flags of its own.
                 if (group_name.empty() || group_name.front() == '+')
                 {
-                    // help will not be used by default in these contexts
                     set_help_flag("");
                     set_help_all_flag("");
                 }
             }
-            using App::add_option;
-            /// Add an existing option to the Option_group
-            Option *add_option(Option *opt)
+
+            using app_t::add_option;
+
+            /// @brief Moves an existing option into this group.
+            ///
+            /// @param opt The option to adopt.
+            /// @return @p opt, for chaining.
+            /// @throws cli::option_not_found_t If this group has no parent.
+            auto add_option(option_t *opt) -> option_t *
             {
                 if (get_parent() == nullptr)
                 {
-                    throw OptionNotFound("Unable to locate the specified option");
+                    throw option_not_found_t("Unable to locate the specified option");
                 }
                 get_parent()->_move_option(opt, this);
                 return opt;
             }
-            /// Add an existing option to the Option_group
-            void add_options(Option *opt)
+
+            /// @brief Moves an existing option into this group.
+            ///
+            /// @param opt The option to adopt.
+            auto add_options(option_t *opt) -> void
             {
                 add_option(opt);
             }
-            /// Add a bunch of options to the group
-            template <typename... Args> void add_options(Option *opt, Args... args)
+
+            /// @brief Moves several existing options into this group.
+            ///
+            /// @param opt The first option to adopt.
+            /// @param args The remaining options to adopt.
+            template <typename... args_t> auto add_options(option_t *opt, args_t... args) -> void
             {
                 add_option(opt);
                 add_options(args...);
             }
-            using App::add_subcommand;
-            /// Add an existing subcommand to be a member of an option_group
-            App *add_subcommand(App *subcom)
+
+            using app_t::add_subcommand;
+
+            /// @brief Moves an existing subcommand into this group.
+            ///
+            /// @param subcom The subcommand to adopt.
+            /// @return @p subcom, for chaining.
+            auto add_subcommand(app_t *subcom) -> app_t *
             {
-                App_p subc = subcom->get_parent()->get_subcommand_ptr(subcom);
+                app_ptr_t subc = subcom->get_parent()->get_subcommand_ptr(subcom);
                 subc->get_parent()->remove_subcommand(subcom);
                 add_subcommand(std::move(subc));
                 return subcom;
             }
     };
 
-    /// Helper function to enable one option group/subcommand when another is used
-    void TriggerOn(App *trigger_app, App *app_to_enable);
+    /// @brief Enables one subcommand or option group when another is used.
+    ///
+    /// @param trigger_app The subcommand whose use fires the trigger.
+    /// @param app_to_enable The subcommand to enable.
+    auto trigger_on(app_t *trigger_app, app_t *app_to_enable) -> void;
 
-    /// Helper function to enable one option group/subcommand when another is used
-    void TriggerOn(App *trigger_app, std::vector<App *> apps_to_enable);
+    /// @brief Enables several subcommands or option groups when another is used.
+    ///
+    /// @param trigger_app The subcommand whose use fires the trigger.
+    /// @param apps_to_enable The subcommands to enable.
+    auto trigger_on(app_t *trigger_app, std::vector<app_t *> apps_to_enable) -> void;
 
-    /// Helper function to disable one option group/subcommand when another is used
-    void TriggerOff(App *trigger_app, App *app_to_enable);
+    /// @brief Disables one subcommand or option group when another is used.
+    ///
+    /// @param trigger_app The subcommand whose use fires the trigger.
+    /// @param app_to_enable The subcommand to disable.
+    auto trigger_off(app_t *trigger_app, app_t *app_to_enable) -> void;
 
-    /// Helper function to disable one option group/subcommand when another is used
-    void TriggerOff(App *trigger_app, std::vector<App *> apps_to_enable);
+    /// @brief Disables several subcommands or option groups when another is used.
+    ///
+    /// @param trigger_app The subcommand whose use fires the trigger.
+    /// @param apps_to_enable The subcommands to disable.
+    auto trigger_off(app_t *trigger_app, std::vector<app_t *> apps_to_enable) -> void;
 
-    /// Helper function to mark an option as deprecated
-    void deprecate_option(Option *opt, const std::string &replacement = "");
+    /// @brief Marks an option as deprecated.
+    ///
+    /// The option keeps working, but its help text records that it should no longer
+    /// be used.
+    ///
+    /// @param opt The option to mark.
+    /// @param replacement The option to use instead, if there is one.
+    auto deprecate_option(option_t *opt, const std::string &replacement = "") -> void;
 
-    /// Helper function to mark an option as deprecated
-    void deprecate_option(App *app, const std::string &option_name, const std::string &replacement = "")
+    /// @brief Marks a named option as deprecated.
+    ///
+    /// @param app The application holding the option.
+    /// @param option_name The option to mark.
+    /// @param replacement The option to use instead, if there is one.
+    /// @throws cli::option_not_found_t If no option matches.
+    auto deprecate_option(app_t *app, const std::string &option_name,
+                          const std::string &replacement = "") -> void
     {
         auto *opt = app->get_option(option_name);
         deprecate_option(opt, replacement);
     }
 
-    /// Helper function to mark an option as deprecated
-    void deprecate_option(App &app, const std::string &option_name, const std::string &replacement = "")
+    /// @brief Marks a named option as deprecated.
+    ///
+    /// @param app The application holding the option.
+    /// @param option_name The option to mark.
+    /// @param replacement The option to use instead, if there is one.
+    /// @throws cli::option_not_found_t If no option matches.
+    auto deprecate_option(app_t &app, const std::string &option_name,
+                          const std::string &replacement = "") -> void
     {
         auto *opt = app.get_option(option_name);
         deprecate_option(opt, replacement);
     }
 
-    /// Helper function to mark an option as retired
-    void retire_option(App *app, Option *opt);
+    /// @brief Marks an option as retired.
+    ///
+    /// A retired option is still accepted on the command line, but does nothing.
+    ///
+    /// @param app The application holding the option.
+    /// @param opt The option to retire.
+    auto retire_option(app_t *app, option_t *opt) -> void;
 
-    /// Helper function to mark an option as retired
-    void retire_option(App &app, Option *opt);
+    /// @brief Marks an option as retired.
+    ///
+    /// @param app The application holding the option.
+    /// @param opt The option to retire.
+    auto retire_option(app_t &app, option_t *opt) -> void;
 
-    /// Helper function to mark an option as retired
-    void retire_option(App *app, const std::string &option_name);
+    /// @brief Marks a named option as retired.
+    ///
+    /// If no such option exists, a retired placeholder is added under that name.
+    ///
+    /// @param app The application holding the option.
+    /// @param option_name The option to retire.
+    auto retire_option(app_t *app, const std::string &option_name) -> void;
 
-    /// Helper function to mark an option as retired
-    void retire_option(App &app, const std::string &option_name);
+    /// @brief Marks a named option as retired.
+    ///
+    /// @param app The application holding the option.
+    /// @param option_name The option to retire.
+    auto retire_option(app_t &app, const std::string &option_name) -> void;
 
     namespace detail
     {
-        /// This class is simply to allow tests access to App's protected functions
-        struct AppFriend
+
+        /// @brief Grants the test suite access to @ref cli::app_t's protected members.
+        struct app_friend_t
         {
-
-                /// Wrap _parse_short, perfectly forward arguments and return
-                template <typename... Args> static decltype(auto) parse_arg(App *app, Args &&...args)
+                /// @brief Calls @ref cli::app_t::_parse_arg.
+                ///
+                /// @param app The application to call into.
+                /// @param args The arguments to forward.
+                /// @return Whatever `_parse_arg` returns.
+                template <typename... args_t>
+                static auto parse_arg(app_t *app, args_t &&...args) -> decltype(auto)
                 {
-                    return app->_parse_arg(std::forward<Args>(args)...);
+                    return app->_parse_arg(std::forward<args_t>(args)...);
                 }
 
-                /// Wrap _parse_subcommand, perfectly forward arguments and return
-                template <typename... Args> static decltype(auto) parse_subcommand(App *app, Args &&...args)
+                /// @brief Calls @ref cli::app_t::_parse_subcommand.
+                ///
+                /// @param app The application to call into.
+                /// @param args The arguments to forward.
+                /// @return Whatever `_parse_subcommand` returns.
+                template <typename... args_t>
+                static auto parse_subcommand(app_t *app, args_t &&...args) -> decltype(auto)
                 {
-                    return app->_parse_subcommand(std::forward<Args>(args)...);
+                    return app->_parse_subcommand(std::forward<args_t>(args)...);
                 }
-                /// Wrap the fallthrough parent function to make sure that is working correctly
-                static App *get_fallthrough_parent(App *app)
+
+                /// @brief Calls @ref cli::app_t::_get_fallthrough_parent.
+                ///
+                /// @param app The application to call into.
+                /// @return The application to fall through to.
+                static auto get_fallthrough_parent(app_t *app) -> app_t *
                 {
                     return app->_get_fallthrough_parent();
                 }
 
-                /// Wrap the const fallthrough parent function to make sure that is working correctly
-                static const App *get_fallthrough_parent(const App *app)
+                /// @brief Calls @ref cli::app_t::_get_fallthrough_parent.
+                ///
+                /// @param app The application to call into.
+                /// @return The application to fall through to.
+                static auto get_fallthrough_parent(const app_t *app) -> const app_t *
                 {
                     return app->_get_fallthrough_parent();
                 }
         };
+
     } // namespace detail
 
     // =============================================
-    // Implementation (from App_inl.hpp)
+    // Implementation
     // =============================================
 
-    App::App(std::string app_description, std::string app_name, App *parent)
+    app_t::app_t(std::string app_description, std::string app_name, app_t *parent)
         : name_(std::move(app_name)), description_(std::move(app_description)), parent_(parent)
     {
-        // Inherit if not from a nullptr
-        if (parent_ != nullptr)
+        if (parent_ == nullptr)
         {
-            if (parent_->help_ptr_ != nullptr)
-                set_help_flag(parent_->help_ptr_->get_name(false, true), parent_->help_ptr_->get_description());
-            if (parent_->help_all_ptr_ != nullptr)
-                set_help_all_flag(parent_->help_all_ptr_->get_name(false, true),
-                                  parent_->help_all_ptr_->get_description());
-
-            /// OptionDefaults
-            option_defaults_ = parent_->option_defaults_;
-
-            // INHERITABLE
-            failure_message_ = parent_->failure_message_;
-            allow_extras_ = parent_->allow_extras_;
-            allow_config_extras_ = parent_->allow_config_extras_;
-            prefix_command_ = parent_->prefix_command_;
-            immediate_callback_ = parent_->immediate_callback_;
-            ignore_case_ = parent_->ignore_case_;
-            ignore_underscore_ = parent_->ignore_underscore_;
-            fallthrough_ = parent_->fallthrough_;
-            validate_positionals_ = parent_->validate_positionals_;
-            validate_optional_arguments_ = parent_->validate_optional_arguments_;
-            configurable_ = parent_->configurable_;
-            allow_windows_style_options_ = parent_->allow_windows_style_options_;
-            group_ = parent_->group_;
-            usage_ = parent_->usage_;
-            footer_ = parent_->footer_;
-            formatter_ = parent_->formatter_;
-            config_formatter_ = parent_->config_formatter_;
-            require_subcommand_max_ = parent_->require_subcommand_max_;
-            allow_prefix_matching_ = parent_->allow_prefix_matching_;
+            return;
         }
+
+        if (parent_->help_ptr_ != nullptr)
+        {
+            set_help_flag(parent_->help_ptr_->get_name(false, true), parent_->help_ptr_->get_description());
+        }
+        if (parent_->help_all_ptr_ != nullptr)
+        {
+            set_help_all_flag(parent_->help_all_ptr_->get_name(false, true),
+                              parent_->help_all_ptr_->get_description());
+        }
+
+        option_defaults_ = parent_->option_defaults_;
+
+        // Everything below is inheritable; see the member declarations.
+        failure_message_ = parent_->failure_message_;
+        allow_extras_ = parent_->allow_extras_;
+        allow_config_extras_ = parent_->allow_config_extras_;
+        prefix_command_ = parent_->prefix_command_;
+        immediate_callback_ = parent_->immediate_callback_;
+        ignore_case_ = parent_->ignore_case_;
+        ignore_underscore_ = parent_->ignore_underscore_;
+        fallthrough_ = parent_->fallthrough_;
+        validate_positionals_ = parent_->validate_positionals_;
+        validate_optional_arguments_ = parent_->validate_optional_arguments_;
+        configurable_ = parent_->configurable_;
+        allow_windows_style_options_ = parent_->allow_windows_style_options_;
+        group_ = parent_->group_;
+        usage_ = parent_->usage_;
+        footer_ = parent_->footer_;
+        formatter_ = parent_->formatter_;
+        config_formatter_ = parent_->config_formatter_;
+        require_subcommand_max_ = parent_->require_subcommand_max_;
+        allow_prefix_matching_ = parent_->allow_prefix_matching_;
     }
 
-    [[nodiscard]] char **App::ensure_utf8(char **argv)
+    auto app_t::ensure_utf8(char **argv) -> char **
     {
 #ifdef _WIN32
         (void)argv;
 
         normalized_argv_ = detail::compute_win32_argv();
 
-        if (!normalized_argv_view_.empty())
-        {
-            normalized_argv_view_.clear();
-        }
-
+        normalized_argv_view_.clear();
         normalized_argv_view_.reserve(normalized_argv_.size());
         for (auto &arg : normalized_argv_)
         {
-            // using const_cast is well-defined, string is known to not be const.
-            normalized_argv_view_.push_back(const_cast<char *>(arg.data()));
+            normalized_argv_view_.push_back(arg.data());
         }
 
         return normalized_argv_view_.data();
@@ -1887,33 +2731,32 @@ export namespace CLI
 #endif
     }
 
-    App *App::name(std::string app_name)
+    auto app_t::name(std::string app_name) -> app_t *
     {
-
         if (parent_ != nullptr)
         {
-            std::string oname = name_;
+            std::string oname = std::move(name_);
             name_ = app_name;
             const auto &res = _compare_subcommand_names(*this, *_get_fallthrough_parent());
             if (!res.empty())
             {
-                name_ = oname;
-                throw(OptionAlreadyAdded(app_name + " conflicts with existing subcommand names"));
+                name_ = std::move(oname);
+                throw option_already_added_t(app_name + " conflicts with existing subcommand names");
             }
         }
         else
         {
-            name_ = app_name;
+            name_ = std::move(app_name);
         }
         has_automatic_name_ = false;
         return this;
     }
 
-    App *App::alias(std::string app_name)
+    auto app_t::alias(std::string app_name) -> app_t *
     {
         if (app_name.empty() || !detail::valid_alias_name_string(app_name))
         {
-            throw IncorrectConstruction("Aliases may not be empty or contain newlines or null characters");
+            throw incorrect_construction_t("Aliases may not be empty or contain newlines or null characters");
         }
         if (parent_ != nullptr)
         {
@@ -1922,20 +2765,22 @@ export namespace CLI
             if (!res.empty())
             {
                 aliases_.pop_back();
-                throw(OptionAlreadyAdded("alias already matches an existing subcommand: " + app_name));
+                throw option_already_added_t("alias already matches an existing subcommand: " + app_name);
             }
         }
         else
         {
-            aliases_.push_back(app_name);
+            aliases_.push_back(std::move(app_name));
         }
 
         return this;
     }
 
-    App *App::immediate_callback(bool immediate)
+    auto app_t::immediate_callback(bool immediate) -> app_t *
     {
         immediate_callback_ = immediate;
+        // The two callback slots hold the same thing under different names; swap
+        // whichever one is occupied into the slot the new mode reads from.
         if (immediate_callback_)
         {
             if (final_callback_ && !(parse_complete_callback_))
@@ -1950,7 +2795,7 @@ export namespace CLI
         return this;
     }
 
-    App *App::ignore_case(bool value)
+    auto app_t::ignore_case(bool value) -> app_t *
     {
         if (value && !ignore_case_)
         {
@@ -1959,15 +2804,16 @@ export namespace CLI
             const auto &match = _compare_subcommand_names(*this, *p);
             if (!match.empty())
             {
-                ignore_case_ = false; // we are throwing so need to be exception invariant
-                throw OptionAlreadyAdded("ignore case would cause subcommand name conflicts: " + match);
+                // Roll back before throwing, so the object is left as it was found.
+                ignore_case_ = false;
+                throw option_already_added_t("ignore case would cause subcommand name conflicts: " + match);
             }
         }
         ignore_case_ = value;
         return this;
     }
 
-    App *App::ignore_underscore(bool value)
+    auto app_t::ignore_underscore(bool value) -> app_t *
     {
         if (value && !ignore_underscore_)
         {
@@ -1977,219 +2823,211 @@ export namespace CLI
             if (!match.empty())
             {
                 ignore_underscore_ = false;
-                throw OptionAlreadyAdded("ignore underscore would cause subcommand name conflicts: " + match);
+                throw option_already_added_t("ignore underscore would cause subcommand name conflicts: " + match);
             }
         }
         ignore_underscore_ = value;
         return this;
     }
 
-    Option *App::add_option(std::string option_name,
-                            callback_t option_callback,
-                            std::string option_description,
-                            bool defaulted,
-                            std::function<std::string()> func)
+    auto app_t::add_option(std::string option_name, callback_t option_callback, std::string option_description,
+                           bool defaulted, std::function<std::string()> func) -> option_t *
     {
-        Option myopt {option_name, option_description, option_callback, this, allow_non_standard_options_};
+        option_t myopt {option_name, option_description, option_callback, this, allow_non_standard_options_};
 
-        // do a quick search in current subcommand for options
-        auto res =
-            std::find_if(std::begin(options_), std::end(options_), [&myopt](const Option_p &v) { return *v == myopt; });
+        const auto res =
+            std::ranges::find_if(options_, [&myopt](const option_ptr_t &v) { return *v == myopt; });
         if (res != options_.end())
         {
             const auto &matchname = (*res)->matching_name(myopt);
-            throw(OptionAlreadyAdded("added option matched existing option name: " + matchname));
+            throw option_already_added_t("added option matched existing option name: " + matchname);
         }
-        /** get a top level parent*/
-        const App *top_level_parent = this;
+
+        // Name conflicts have to be checked against the nearest named ancestor, since
+        // that is the scope a configuration file addresses.
+        const app_t *top_level_parent = this;
         while (top_level_parent->name_.empty() && top_level_parent->parent_ != nullptr)
         {
             top_level_parent = top_level_parent->parent_;
         }
 
+        const auto configurable_conflict = [top_level_parent](const std::string &probe) {
+            const auto *op = top_level_parent->get_option_no_throw(probe);
+            return op != nullptr && op->get_configurable();
+        };
+
         if (myopt.lnames_.empty() && myopt.snames_.empty())
         {
-            // if the option is positional only there is additional potential for ambiguities in config files and needs
-            // to be checked
+            // A positional-only option can still collide in a configuration file, where
+            // the leading dashes are not written.
             std::string test_name = "--" + myopt.get_single_name();
             if (test_name.size() == 3)
             {
                 test_name.erase(0, 1);
             }
-            // if we are in option group
-            const auto *op = top_level_parent->get_option_no_throw(test_name);
-            if (op != nullptr && op->get_configurable())
+            if (configurable_conflict(test_name))
             {
-                throw(OptionAlreadyAdded("added option positional name matches existing option: " + test_name));
+                throw option_already_added_t("added option positional name matches existing option: " + test_name);
             }
-            // need to check if there is another positional with the same name that also doesn't have any long or
-            // short names
-            op = top_level_parent->get_option_no_throw(myopt.get_single_name());
+            // Two positionals with no dashed names at all cannot be told apart.
+            const auto *op = top_level_parent->get_option_no_throw(myopt.get_single_name());
             if (op != nullptr && op->lnames_.empty() && op->snames_.empty())
             {
-                throw(OptionAlreadyAdded("unable to disambiguate with existing option: " + test_name));
+                throw option_already_added_t("unable to disambiguate with existing option: " + test_name);
             }
         }
         else if (top_level_parent != this)
         {
-            for (auto &ln : myopt.lnames_)
+            for (const auto &ln : myopt.lnames_)
             {
-                const auto *op = top_level_parent->get_option_no_throw(ln);
-                if (op != nullptr && op->get_configurable())
+                if (configurable_conflict(ln))
                 {
-                    throw(OptionAlreadyAdded("added option matches existing positional option: " + ln));
+                    throw option_already_added_t("added option matches existing positional option: " + ln);
                 }
-                op = top_level_parent->get_option_no_throw("--" + ln);
-                if (op != nullptr && op->get_configurable())
+                if (configurable_conflict("--" + ln))
                 {
-                    throw(OptionAlreadyAdded("added option matches existing option: --" + ln));
+                    throw option_already_added_t("added option matches existing option: --" + ln);
                 }
                 if (ln.size() == 1 || top_level_parent->get_allow_non_standard_option_names())
                 {
-                    op = top_level_parent->get_option_no_throw("-" + ln);
-                    if (op != nullptr && op->get_configurable())
+                    if (configurable_conflict("-" + ln))
                     {
-                        throw(OptionAlreadyAdded("added option matches existing option: -" + ln));
+                        throw option_already_added_t("added option matches existing option: -" + ln);
                     }
                 }
             }
-            for (auto &sn : myopt.snames_)
+            for (const auto &sn : myopt.snames_)
             {
-                const auto *op = top_level_parent->get_option_no_throw(sn);
-                if (op != nullptr && op->get_configurable())
+                if (configurable_conflict(sn))
                 {
-                    throw(OptionAlreadyAdded("added option matches existing positional option: " + sn));
+                    throw option_already_added_t("added option matches existing positional option: " + sn);
                 }
-                op = top_level_parent->get_option_no_throw("-" + sn);
-                if (op != nullptr && op->get_configurable())
+                if (configurable_conflict("-" + sn))
                 {
-                    throw(OptionAlreadyAdded("added option matches existing option: -" + sn));
+                    throw option_already_added_t("added option matches existing option: -" + sn);
                 }
-                op = top_level_parent->get_option_no_throw("--" + sn);
-                if (op != nullptr && op->get_configurable())
+                if (configurable_conflict("--" + sn))
                 {
-                    throw(OptionAlreadyAdded("added option matches existing option: --" + sn));
+                    throw option_already_added_t("added option matches existing option: --" + sn);
                 }
             }
         }
+
         if (allow_non_standard_options_ && !myopt.snames_.empty())
         {
-
-            for (auto &sname : myopt.snames_)
+            // A multi-character short name shadows the single-character option sharing
+            // its first letter, so neither direction may already exist.
+            for (const auto &sname : myopt.snames_)
             {
                 if (sname.length() > 1)
                 {
-                    std::string test_name;
-                    test_name.push_back('-');
-                    test_name.push_back(sname.front());
-                    const auto *op = top_level_parent->get_option_no_throw(test_name);
-                    if (op != nullptr)
+                    const std::string test_name {'-', sname.front()};
+                    if (top_level_parent->get_option_no_throw(test_name) != nullptr)
                     {
-                        throw(OptionAlreadyAdded("added option interferes with existing short option: " + sname));
+                        throw option_already_added_t("added option interferes with existing short option: " + sname);
                     }
                 }
             }
-            for (auto &opt : top_level_parent->get_options())
+            for (const auto &opt : top_level_parent->get_options())
             {
                 for (const auto &osn : opt->snames_)
                 {
                     if (osn.size() > 1)
                     {
-                        std::string test_name;
-                        test_name.push_back(osn.front());
+                        const std::string test_name {osn.front()};
                         if (myopt.check_sname(test_name))
                         {
-                            throw(OptionAlreadyAdded("added option interferes with existing non standard option: " +
-                                                     osn));
+                            throw option_already_added_t(
+                                "added option interferes with existing non standard option: " + osn);
                         }
                     }
                 }
             }
         }
+
         options_.emplace_back();
-        Option_p &option = options_.back();
-        option.reset(new Option(option_name, option_description, option_callback, this, allow_non_standard_options_));
+        option_ptr_t &option = options_.back();
+        // Not std::make_unique: option_t's constructor is protected, and app_t reaches
+        // it only as a friend.
+        option.reset(new option_t(std::move(option_name), std::move(option_description), std::move(option_callback),
+                                  this, allow_non_standard_options_));
 
-        // Set the default string capture function
-        option->default_function(func);
+        option->default_function(std::move(func));
 
-        // For compatibility with CLI11 1.7 and before, capture the default string here
+        // Kept for compatibility with CLI11 1.7 and earlier, which captured here.
         if (defaulted)
+        {
             option->capture_default_str();
+        }
 
-        // Transfer defaults to the new option
         option_defaults_.copy_to(option.get());
 
-        // Don't bother to capture if we already did
         if (!defaulted && option->get_always_capture_default())
+        {
             option->capture_default_str();
+        }
 
         return option.get();
     }
 
-    Option *App::set_help_flag(std::string flag_name, const std::string &help_description)
+    auto app_t::set_help_flag(std::string flag_name, const std::string &help_description) -> option_t *
     {
-        // take flag_description by const reference otherwise add_flag tries to assign to help_description
+        // help_description is taken by const reference so that add_flag does not select
+        // the overload that assigns the flag's result back into it.
         if (help_ptr_ != nullptr)
         {
             remove_option(help_ptr_);
             help_ptr_ = nullptr;
         }
 
-        // Empty name will simply remove the help flag
         if (!flag_name.empty())
         {
-            help_ptr_ = add_flag(flag_name, help_description);
-            help_ptr_->configurable(false)->callback_priority(CallbackPriority::First);
+            help_ptr_ = add_flag(std::move(flag_name), help_description);
+            help_ptr_->configurable(false)->callback_priority(callback_priority_t::first);
         }
 
         return help_ptr_;
     }
 
-    Option *App::set_help_all_flag(std::string help_name, const std::string &help_description)
+    auto app_t::set_help_all_flag(std::string help_name, const std::string &help_description) -> option_t *
     {
-        // take flag_description by const reference otherwise add_flag tries to assign to flag_description
         if (help_all_ptr_ != nullptr)
         {
             remove_option(help_all_ptr_);
             help_all_ptr_ = nullptr;
         }
 
-        // Empty name will simply remove the help all flag
         if (!help_name.empty())
         {
-            help_all_ptr_ = add_flag(help_name, help_description);
-            help_all_ptr_->configurable(false)->callback_priority(CallbackPriority::First);
+            help_all_ptr_ = add_flag(std::move(help_name), help_description);
+            help_all_ptr_->configurable(false)->callback_priority(callback_priority_t::first);
         }
 
         return help_all_ptr_;
     }
 
-    Option *App::set_version_flag(std::string flag_name,
-                                  const std::string &versionString,
-                                  const std::string &version_help)
+    auto app_t::set_version_flag(std::string flag_name, const std::string &version_string,
+                                 const std::string &version_help) -> option_t *
     {
-        // take flag_description by const reference otherwise add_flag tries to assign to version_description
         if (version_ptr_ != nullptr)
         {
             remove_option(version_ptr_);
             version_ptr_ = nullptr;
         }
 
-        // Empty name will simply remove the version flag
         if (!flag_name.empty())
         {
             version_ptr_ = add_flag_callback(
-                flag_name, [versionString]() { throw(CLI::CallForVersion(versionString, 0)); }, version_help);
-            version_ptr_->configurable(false)->callback_priority(CallbackPriority::First);
+                std::move(flag_name), [version_string] { throw call_for_version_t(version_string, 0); },
+                version_help);
+            version_ptr_->configurable(false)->callback_priority(callback_priority_t::first);
         }
 
         return version_ptr_;
     }
 
-    Option *App::set_version_flag(std::string flag_name,
-                                  std::function<std::string()> vfunc,
-                                  const std::string &version_help)
+    auto app_t::set_version_flag(std::string flag_name, std::function<std::string()> vfunc,
+                                 const std::string &version_help) -> option_t *
     {
         if (version_ptr_ != nullptr)
         {
@@ -2197,98 +3035,91 @@ export namespace CLI
             version_ptr_ = nullptr;
         }
 
-        // Empty name will simply remove the version flag
         if (!flag_name.empty())
         {
-            version_ptr_ =
-                add_flag_callback(flag_name, [vfunc]() { throw(CLI::CallForVersion(vfunc(), 0)); }, version_help);
-            version_ptr_->configurable(false)->callback_priority(CallbackPriority::First);
+            version_ptr_ = add_flag_callback(
+                std::move(flag_name), [f = std::move(vfunc)] { throw call_for_version_t(f(), 0); }, version_help);
+            version_ptr_->configurable(false)->callback_priority(callback_priority_t::first);
         }
 
         return version_ptr_;
     }
 
-    Option *App::_add_flag_internal(std::string flag_name, CLI::callback_t fun, std::string flag_description)
+    auto app_t::_add_flag_internal(std::string flag_name, callback_t fun,
+                                   std::string flag_description) -> option_t *
     {
-        Option *opt = nullptr;
+        option_t *opt = nullptr;
         if (detail::has_default_flag_values(flag_name))
         {
-            // check for default values and if it has them
             auto flag_defaults = detail::get_default_flag_values(flag_name);
             detail::remove_default_flag_values(flag_name);
             opt = add_option(std::move(flag_name), std::move(fun), std::move(flag_description), false);
-            for (const auto &fname : flag_defaults)
-                opt->fnames_.push_back(fname.first);
+            for (const auto &[fname, fdefault] : flag_defaults)
+            {
+                opt->fnames_.push_back(fname);
+            }
             opt->default_flag_values_ = std::move(flag_defaults);
         }
         else
         {
             opt = add_option(std::move(flag_name), std::move(fun), std::move(flag_description), false);
         }
-        // flags cannot have positional values
+
+        // A flag consumes no values, so it cannot also be a positional.
         if (opt->get_positional())
         {
             auto pos_name = opt->get_name(true);
             remove_option(opt);
-            throw IncorrectConstruction::PositionalFlag(pos_name);
+            throw incorrect_construction_t::positional_flag(pos_name);
         }
-        opt->multi_option_policy(MultiOptionPolicy::TakeLast);
+        opt->multi_option_policy(multi_option_policy_t::take_last);
         opt->expected(0);
         opt->required(false);
         return opt;
     }
 
-    Option *App::add_flag_callback(std::string flag_name,
-                                   std::function<void(void)> function, ///< A function to call, void(void)
-                                   std::string flag_description)
+    auto app_t::add_flag_callback(std::string flag_name, std::function<void()> function,
+                                  std::string flag_description) -> option_t *
     {
-
-        CLI::callback_t fun = [function](const CLI::results_t &res) {
-            using CLI::detail::lexical_cast;
+        callback_t fun = [f = std::move(function)](const results_t &res) {
+            using detail::lexical_cast;
             bool trigger {false};
-            auto result = lexical_cast(res[0], trigger);
+            const auto result = lexical_cast(res[0], trigger);
             if (result && trigger)
             {
-                function();
+                f();
             }
             return result;
         };
-        return _add_flag_internal(flag_name, std::move(fun), std::move(flag_description));
+        return _add_flag_internal(std::move(flag_name), std::move(fun), std::move(flag_description));
     }
 
-    Option *App::add_flag_function(std::string flag_name,
-                                   std::function<void(std::int64_t)> function, ///< A function to call, void(int)
-                                   std::string flag_description)
+    auto app_t::add_flag_function(std::string flag_name, std::function<void(std::int64_t)> function,
+                                  std::string flag_description) -> option_t *
     {
-
-        CLI::callback_t fun = [function](const CLI::results_t &res) {
-            using CLI::detail::lexical_cast;
+        callback_t fun = [f = std::move(function)](const results_t &res) {
+            using detail::lexical_cast;
             std::int64_t flag_count {0};
             lexical_cast(res[0], flag_count);
-            function(flag_count);
+            f(flag_count);
             return true;
         };
-        return _add_flag_internal(flag_name, std::move(fun), std::move(flag_description))
-            ->multi_option_policy(MultiOptionPolicy::Sum);
+        return _add_flag_internal(std::move(flag_name), std::move(fun), std::move(flag_description))
+            ->multi_option_policy(multi_option_policy_t::sum);
     }
 
-    Option *App::set_config(std::string option_name,
-                            std::string default_filename,
-                            const std::string &help_message,
-                            bool config_required)
+    auto app_t::set_config(std::string option_name, std::string default_filename, const std::string &help_message,
+                           bool config_required) -> option_t *
     {
-
-        // Remove existing config if present
         if (config_ptr_ != nullptr)
         {
             remove_option(config_ptr_);
-            config_ptr_ = nullptr; // need to remove the config_ptr completely
+            config_ptr_ = nullptr;
         }
 
-        // Only add config if option passed
         if (!option_name.empty())
         {
-            config_ptr_ = add_option(option_name, help_message);
+            config_ptr_ = add_option(std::move(option_name), help_message);
             if (config_required)
             {
                 config_ptr_->required();
@@ -2299,31 +3130,38 @@ export namespace CLI
                 config_ptr_->force_callback_ = true;
             }
             config_ptr_->configurable(false);
-            // set the option to take the last value and reverse given by default
-            config_ptr_->multi_option_policy(MultiOptionPolicy::Reverse);
+            // Later files take precedence, and are applied in reverse so that the last
+            // one named wins.
+            config_ptr_->multi_option_policy(multi_option_policy_t::reverse);
         }
 
         return config_ptr_;
     }
 
-    bool App::remove_option(Option *opt)
+    auto app_t::remove_option(option_t *opt) -> bool
     {
-        // Make sure no links exist
-        for (Option_p &op : options_)
+        // Drop any dependency edges pointing at the option before it disappears.
+        for (option_ptr_t &op : options_)
         {
             op->remove_needs(opt);
             op->remove_excludes(opt);
         }
 
         if (help_ptr_ == opt)
+        {
             help_ptr_ = nullptr;
+        }
         if (help_all_ptr_ == opt)
+        {
             help_all_ptr_ = nullptr;
+        }
         if (config_ptr_ == opt)
+        {
             config_ptr_ = nullptr;
+        }
 
-        auto iterator =
-            std::find_if(std::begin(options_), std::end(options_), [opt](const Option_p &v) { return v.get() == opt; });
+        const auto iterator =
+            std::ranges::find_if(options_, [opt](const option_ptr_t &v) { return v.get() == opt; });
         if (iterator != std::end(options_))
         {
             options_.erase(iterator);
@@ -2332,55 +3170,59 @@ export namespace CLI
         return false;
     }
 
-    App *App::add_subcommand(std::string subcommand_name, std::string subcommand_description)
+    auto app_t::add_subcommand(std::string subcommand_name, std::string subcommand_description) -> app_t *
     {
         if (!subcommand_name.empty() && !detail::valid_name_string(subcommand_name))
         {
             if (!detail::valid_first_char(subcommand_name[0]))
             {
-                throw IncorrectConstruction(
+                throw incorrect_construction_t(
                     "Subcommand name starts with invalid character, '!' and '-' and control characters");
             }
             for (auto c : subcommand_name)
             {
                 if (!detail::valid_later_char(c))
                 {
-                    throw IncorrectConstruction(std::string("Subcommand name contains invalid character ('") + c +
-                                                "'), all characters are allowed except"
-                                                "'=',':','{','}', ' ', and control characters");
+                    throw incorrect_construction_t(std::string("Subcommand name contains invalid character ('") + c +
+                                                   "'), all characters are allowed except"
+                                                   "'=',':','{','}', ' ', and control characters");
                 }
             }
         }
-        CLI::App_p subcom = std::shared_ptr<App>(new App(std::move(subcommand_description), subcommand_name, this));
+        // Not std::make_shared: the three-argument constructor is protected.
+        app_ptr_t subcom =
+            std::shared_ptr<app_t>(new app_t(std::move(subcommand_description), std::move(subcommand_name), this));
         return add_subcommand(std::move(subcom));
     }
 
-    App *App::add_subcommand(CLI::App_p subcom)
+    auto app_t::add_subcommand(app_ptr_t subcom) -> app_t *
     {
         if (!subcom)
-            throw IncorrectConstruction("passed App is not valid");
+        {
+            throw incorrect_construction_t("passed app_t is not valid");
+        }
         auto *ckapp = (name_.empty() && parent_ != nullptr) ? _get_fallthrough_parent() : this;
         const auto &mstrg = _compare_subcommand_names(*subcom, *ckapp);
         if (!mstrg.empty())
         {
-            throw(OptionAlreadyAdded("subcommand name or alias matches existing subcommand: " + mstrg));
+            throw option_already_added_t("subcommand name or alias matches existing subcommand: " + mstrg);
         }
         subcom->parent_ = this;
         subcommands_.push_back(std::move(subcom));
         return subcommands_.back().get();
     }
 
-    bool App::remove_subcommand(App *subcom)
+    auto app_t::remove_subcommand(app_t *subcom) -> bool
     {
-        // Make sure no links exist
-        for (App_p &sub : subcommands_)
+        // Drop any dependency edges pointing at the subcommand before it disappears.
+        for (app_ptr_t &sub : subcommands_)
         {
             sub->remove_excludes(subcom);
             sub->remove_needs(subcom);
         }
 
-        auto iterator = std::find_if(
-            std::begin(subcommands_), std::end(subcommands_), [subcom](const App_p &v) { return v.get() == subcom; });
+        const auto iterator =
+            std::ranges::find_if(subcommands_, [subcom](const app_ptr_t &v) { return v.get() == subcom; });
         if (iterator != std::end(subcommands_))
         {
             subcommands_.erase(iterator);
@@ -2389,82 +3231,104 @@ export namespace CLI
         return false;
     }
 
-    App *App::get_subcommand(const App *subcom) const
+    auto app_t::get_subcommand(const app_t *subcom) const -> app_t *
     {
         if (subcom == nullptr)
-            throw OptionNotFound("nullptr passed");
-        for (const App_p &subcomptr : subcommands_)
+        {
+            throw option_not_found_t("nullptr passed");
+        }
+        for (const app_ptr_t &subcomptr : subcommands_)
+        {
             if (subcomptr.get() == subcom)
+            {
                 return subcomptr.get();
-        throw OptionNotFound(subcom->get_name());
+            }
+        }
+        throw option_not_found_t(subcom->get_name());
     }
 
-    [[nodiscard]] App *App::get_subcommand(std::string subcom) const
+    auto app_t::get_subcommand(std::string subcom) const -> app_t *
     {
         auto *subc = _find_subcommand(subcom, false, false);
         if (subc == nullptr)
-            throw OptionNotFound(subcom);
+        {
+            throw option_not_found_t(std::move(subcom));
+        }
         return subc;
     }
 
-    [[nodiscard]] App *App::get_subcommand_no_throw(std::string subcom) const noexcept
+    auto app_t::get_subcommand_no_throw(std::string subcom) const noexcept -> app_t *
     {
         return _find_subcommand(subcom, false, false);
     }
 
-    [[nodiscard]] App *App::get_subcommand(int index) const
+    auto app_t::get_subcommand(int index) const -> app_t *
     {
         if (index >= 0)
         {
-            auto uindex = static_cast<unsigned>(index);
+            const auto uindex = static_cast<unsigned>(index);
             if (uindex < subcommands_.size())
+            {
                 return subcommands_[uindex].get();
+            }
         }
-        throw OptionNotFound(std::to_string(index));
+        throw option_not_found_t(std::to_string(index));
     }
 
-    CLI::App_p App::get_subcommand_ptr(App *subcom) const
+    auto app_t::get_subcommand_ptr(app_t *subcom) const -> app_ptr_t
     {
         if (subcom == nullptr)
-            throw OptionNotFound("nullptr passed");
-        for (const App_p &subcomptr : subcommands_)
+        {
+            throw option_not_found_t("nullptr passed");
+        }
+        for (const app_ptr_t &subcomptr : subcommands_)
+        {
             if (subcomptr.get() == subcom)
+            {
                 return subcomptr;
-        throw OptionNotFound(subcom->get_name());
+            }
+        }
+        throw option_not_found_t(subcom->get_name());
     }
 
-    [[nodiscard]] CLI::App_p App::get_subcommand_ptr(std::string subcom) const
+    auto app_t::get_subcommand_ptr(std::string subcom) const -> app_ptr_t
     {
-        for (const App_p &subcomptr : subcommands_)
+        for (const app_ptr_t &subcomptr : subcommands_)
+        {
             if (subcomptr->check_name(subcom))
+            {
                 return subcomptr;
-        throw OptionNotFound(subcom);
+            }
+        }
+        throw option_not_found_t(std::move(subcom));
     }
 
-    [[nodiscard]] CLI::App_p App::get_subcommand_ptr(int index) const
+    auto app_t::get_subcommand_ptr(int index) const -> app_ptr_t
     {
         if (index >= 0)
         {
-            auto uindex = static_cast<unsigned>(index);
+            const auto uindex = static_cast<unsigned>(index);
             if (uindex < subcommands_.size())
+            {
                 return subcommands_[uindex];
+            }
         }
-        throw OptionNotFound(std::to_string(index));
+        throw option_not_found_t(std::to_string(index));
     }
 
-    [[nodiscard]] CLI::App *App::get_option_group(std::string group_name) const
+    auto app_t::get_option_group(std::string group_name) const -> app_t *
     {
-        for (const App_p &app : subcommands_)
+        for (const app_ptr_t &app : subcommands_)
         {
             if (app->name_.empty() && app->group_ == group_name)
             {
                 return app.get();
             }
         }
-        throw OptionNotFound(group_name);
+        throw option_not_found_t(std::move(group_name));
     }
 
-    [[nodiscard]] std::size_t App::count_all() const
+    auto app_t::count_all() const -> std::size_t
     {
         std::size_t cnt {0};
         for (const auto &opt : options_)
@@ -2476,36 +3340,37 @@ export namespace CLI
             cnt += sub->count_all();
         }
         if (!get_name().empty())
-        { // for named subcommands add the number of times the subcommand was called
+        {
+            // A named subcommand also counts each time it was invoked.
             cnt += parsed_;
         }
         return cnt;
     }
 
-    void App::clear()
+    auto app_t::clear() -> void
     {
-
         parsed_ = 0;
         pre_parse_called_ = false;
 
         missing_.clear();
         parsed_subcommands_.clear();
         parse_order_.clear();
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
             opt->clear();
         }
-        for (const App_p &subc : subcommands_)
+        for (const app_ptr_t &subc : subcommands_)
         {
             subc->clear();
         }
     }
 
-    void App::parse(int argc, const char *const *argv)
+    auto app_t::parse(int argc, const char *const *argv) -> void
     {
         parse_char_t(argc, argv);
     }
-    void App::parse(int argc, const wchar_t *const *argv)
+
+    auto app_t::parse(int argc, const wchar_t *const *argv) -> void
     {
         parse_char_t(argc, argv);
     }
@@ -2513,93 +3378,106 @@ export namespace CLI
     namespace detail
     {
 
-        // Do nothing or perform narrowing
-        const char *maybe_narrow(const char *str)
+        /// @brief Passes a narrow string through unchanged.
+        ///
+        /// @param str The string to pass through.
+        /// @return @p str.
+        auto maybe_narrow(const char *str) -> const char *
         {
             return str;
         }
-        std::string maybe_narrow(const wchar_t *str)
+
+        /// @brief Narrows a wide string.
+        ///
+        /// @param str The string to narrow.
+        /// @return The narrowed string.
+        auto maybe_narrow(const wchar_t *str) -> std::string
         {
             return narrow(str);
         }
 
     } // namespace detail
 
-    template <class CharT> void App::parse_char_t(int argc, const CharT *const *argv)
+    template <class char_t> auto app_t::parse_char_t(int argc, const char_t *const *argv) -> void
     {
-        // If the name is not set, read from command line
         if (name_.empty() || has_automatic_name_)
         {
             has_automatic_name_ = true;
             name_ = detail::maybe_narrow(argv[0]);
         }
 
+        // Reversed, because parsing consumes from the back.
         std::vector<std::string> args;
         args.reserve(static_cast<std::size_t>(argc) - 1U);
         for (auto i = static_cast<std::size_t>(argc) - 1U; i > 0U; --i)
+        {
             args.emplace_back(detail::maybe_narrow(argv[i]));
+        }
 
         parse(std::move(args));
     }
 
-    void App::parse(std::string commandline, bool program_name_included)
+    auto app_t::parse(std::string commandline, bool program_name_included) -> void
     {
-
         if (program_name_included)
         {
             auto nstr = detail::split_program_name(commandline);
             if ((name_.empty()) || (has_automatic_name_))
             {
                 has_automatic_name_ = true;
-                name_ = nstr.first;
+                name_ = std::move(nstr.name);
             }
-            commandline = std::move(nstr.second);
+            commandline = std::move(nstr.arguments);
         }
         else
         {
             detail::trim(commandline);
         }
-        // the next section of code is to deal with quoted arguments after an '=' or ':' for windows like operations
+
+        // Neutralise a separator that only introduces a quoted value, so that
+        // `--opt="a b"` survives the split below.
         if (!commandline.empty())
         {
             commandline = detail::find_and_modify(commandline, "=", detail::escape_detect);
             if (allow_windows_style_options_)
+            {
                 commandline = detail::find_and_modify(commandline, ":", detail::escape_detect);
+            }
         }
 
         auto args = detail::split_up(std::move(commandline));
-        // remove all empty strings
-        args.erase(std::remove(args.begin(), args.end(), std::string {}), args.end());
+        std::erase(args, std::string {});
         try
         {
             detail::remove_quotes(args);
         }
         catch (const std::invalid_argument &arg)
         {
-            throw CLI::ParseError(arg.what(), CLI::ExitCodes::InvalidError);
+            throw parse_error_t(arg.what(), exit_codes_t::invalid_error);
         }
-        std::reverse(args.begin(), args.end());
+        std::ranges::reverse(args);
         parse(std::move(args));
     }
 
-    void App::parse(std::wstring commandline, bool program_name_included)
+    auto app_t::parse(std::wstring commandline, bool program_name_included) -> void
     {
         parse(narrow(commandline), program_name_included);
     }
 
-    void App::parse(std::vector<std::string> &args)
+    auto app_t::parse(std::vector<std::string> &args) -> void
     {
-        // Clear if parsed
         if (parsed_ > 0)
+        {
             clear();
+        }
 
-        // parsed_ is incremented in commands/subcommands,
-        // but placed here to make sure this is cleared when
-        // running parse after an error is thrown, even by _validate or _configure.
+        // parsed_ is normally incremented while parsing, but it is set here so that a
+        // parse following an error is still cleared, even if _validate or _configure
+        // is what threw.
         parsed_ = 1;
         _validate();
         _configure();
-        // set the parent as nullptr as this object should be the top now
+        // This object is the root now.
         parent_ = nullptr;
         parsed_ = 0;
 
@@ -2607,19 +3485,16 @@ export namespace CLI
         run_callback();
     }
 
-    void App::parse(std::vector<std::string> &&args)
+    auto app_t::parse(std::vector<std::string> &&args) -> void
     {
-        // Clear if parsed
         if (parsed_ > 0)
+        {
             clear();
+        }
 
-        // parsed_ is incremented in commands/subcommands,
-        // but placed here to make sure this is cleared when
-        // running parse after an error is thrown, even by _validate or _configure.
         parsed_ = 1;
         _validate();
         _configure();
-        // set the parent as nullptr as this object should be the top now
         parent_ = nullptr;
         parsed_ = 0;
 
@@ -2627,143 +3502,122 @@ export namespace CLI
         run_callback();
     }
 
-    void App::parse_from_stream(std::istream &input)
+    auto app_t::parse_from_stream(std::istream &input) -> void
     {
         if (parsed_ == 0)
         {
             _validate();
             _configure();
-            // set the parent as nullptr as this object should be the top now
         }
 
         _parse_stream(input);
         run_callback();
     }
 
-    int App::exit(const Error &e, std::ostream &out, std::ostream &err) const
+    auto app_t::exit(const error_t &e, std::ostream &out, std::ostream &err) const -> int
     {
-
-        /// Avoid printing anything if this is a CLI::RuntimeError
-        if (e.get_name() == "RuntimeError")
+        // Dispatch on the error's own name constant rather than a string literal, so
+        // that renaming an error type cannot silently break this.
+        if (e.get_name() == runtime_error_t::error_type_name)
+        {
             return e.get_exit_code();
+        }
 
-        if (e.get_name() == "CallForHelp")
+        if (e.get_name() == call_for_help_t::error_type_name)
         {
             out << help();
             return e.get_exit_code();
         }
 
-        if (e.get_name() == "CallForAllHelp")
+        if (e.get_name() == call_for_all_help_t::error_type_name)
         {
-            out << help("", AppFormatMode::All);
+            out << help("", app_format_mode_t::all);
             return e.get_exit_code();
         }
 
-        if (e.get_name() == "CallForVersion")
+        if (e.get_name() == call_for_version_t::error_type_name)
         {
             out << e.what() << '\n';
             return e.get_exit_code();
         }
 
-        if (e.get_exit_code() != static_cast<int>(ExitCodes::Success))
+        if (e.get_exit_code() != static_cast<int>(exit_codes_t::success))
         {
             if (failure_message_)
+            {
                 err << failure_message_(this, e) << std::flush;
+            }
         }
 
         return e.get_exit_code();
     }
 
-    std::vector<const App *> App::get_subcommands(const std::function<bool(const App *)> &filter) const
+    auto app_t::get_subcommands(const std::function<bool(const app_t *)> &filter) const
+        -> std::vector<const app_t *>
     {
-        std::vector<const App *> subcomms(subcommands_.size());
-        std::transform(std::begin(subcommands_), std::end(subcommands_), std::begin(subcomms), [](const App_p &v) {
-            return v.get();
-        });
+        auto subcomms = subcommands_ | std::views::transform([](const app_ptr_t &v) { return v.get(); }) |
+                        std::ranges::to<std::vector<const app_t *>>();
 
         if (filter)
         {
-            subcomms.erase(std::remove_if(std::begin(subcomms),
-                                          std::end(subcomms),
-                                          [&filter](const App *app) { return !filter(app); }),
-                           std::end(subcomms));
+            std::erase_if(subcomms, [&filter](const app_t *app) { return !filter(app); });
         }
 
         return subcomms;
     }
 
-    std::vector<App *> App::get_subcommands(const std::function<bool(App *)> &filter)
+    auto app_t::get_subcommands(const std::function<bool(app_t *)> &filter) -> std::vector<app_t *>
     {
-        std::vector<App *> subcomms(subcommands_.size());
-        std::transform(std::begin(subcommands_), std::end(subcommands_), std::begin(subcomms), [](const App_p &v) {
-            return v.get();
-        });
+        auto subcomms = subcommands_ | std::views::transform([](const app_ptr_t &v) { return v.get(); }) |
+                        std::ranges::to<std::vector<app_t *>>();
 
         if (filter)
         {
-            subcomms.erase(
-                std::remove_if(std::begin(subcomms), std::end(subcomms), [&filter](App *app) { return !filter(app); }),
-                std::end(subcomms));
+            std::erase_if(subcomms, [&filter](app_t *app) { return !filter(app); });
         }
 
         return subcomms;
     }
 
-    bool App::remove_excludes(Option *opt)
+    auto app_t::remove_excludes(option_t *opt) -> bool
     {
-        auto iterator = std::find(std::begin(exclude_options_), std::end(exclude_options_), opt);
-        if (iterator == std::end(exclude_options_))
+        return exclude_options_.erase(opt) > 0;
+    }
+
+    auto app_t::remove_excludes(app_t *app) -> bool
+    {
+        if (exclude_subcommands_.erase(app) == 0)
         {
             return false;
         }
-        exclude_options_.erase(iterator);
+        // Subcommand exclusion is symmetric, so drop the other direction too.
+        app->remove_excludes(this);
         return true;
     }
 
-    bool App::remove_excludes(App *app)
+    auto app_t::remove_needs(option_t *opt) -> bool
     {
-        auto iterator = std::find(std::begin(exclude_subcommands_), std::end(exclude_subcommands_), app);
-        if (iterator == std::end(exclude_subcommands_))
-        {
-            return false;
-        }
-        auto *other_app = *iterator;
-        exclude_subcommands_.erase(iterator);
-        other_app->remove_excludes(this);
-        return true;
+        return need_options_.erase(opt) > 0;
     }
 
-    bool App::remove_needs(Option *opt)
+    auto app_t::remove_needs(app_t *app) -> bool
     {
-        auto iterator = std::find(std::begin(need_options_), std::end(need_options_), opt);
-        if (iterator == std::end(need_options_))
-        {
-            return false;
-        }
-        need_options_.erase(iterator);
-        return true;
+        return need_subcommands_.erase(app) > 0;
     }
 
-    bool App::remove_needs(App *app)
-    {
-        auto iterator = std::find(std::begin(need_subcommands_), std::end(need_subcommands_), app);
-        if (iterator == std::end(need_subcommands_))
-        {
-            return false;
-        }
-        need_subcommands_.erase(iterator);
-        return true;
-    }
-
-    [[nodiscard]] std::string App::help(std::string prev, AppFormatMode mode) const
+    auto app_t::help(std::string prev, app_format_mode_t mode) const -> std::string
     {
         if (prev.empty())
+        {
             prev = get_name();
+        }
         else
+        {
             prev += " " + get_name();
+        }
 
-        // Delegate to subcommand if needed
-        auto selected_subcommands = get_subcommands();
+        // Help belongs to the deepest subcommand that was named.
+        const auto &selected_subcommands = get_subcommands();
         if (!selected_subcommands.empty())
         {
             return selected_subcommands.back()->help(prev, mode);
@@ -2771,12 +3625,14 @@ export namespace CLI
         return formatter_->make_help(this, prev, mode);
     }
 
-    [[nodiscard]] std::string App::version() const
+    auto app_t::version() const -> std::string
     {
         std::string val;
         if (version_ptr_ != nullptr)
         {
-            // copy the results for reuse later
+            // Running the callback is the only way to reach a user-supplied version
+            // function, and it does so by throwing. Save and restore the option's
+            // results so that asking for the version does not disturb a parse.
             results_t rv = version_ptr_->results();
             version_ptr_->clear();
             version_ptr_->add_result("true");
@@ -2784,7 +3640,7 @@ export namespace CLI
             {
                 version_ptr_->run_callback();
             }
-            catch (const CLI::CallForVersion &cfv)
+            catch (const call_for_version_t &cfv)
             {
                 val = cfv.what();
             }
@@ -2794,39 +3650,36 @@ export namespace CLI
         return val;
     }
 
-    std::vector<const Option *> App::get_options(const std::function<bool(const Option *)> filter) const
+    auto app_t::get_options(const std::function<bool(const option_t *)> &filter) const
+        -> std::vector<const option_t *>
     {
-        std::vector<const Option *> options(options_.size());
-        std::transform(std::begin(options_), std::end(options_), std::begin(options), [](const Option_p &val) {
-            return val.get();
-        });
+        auto options = options_ | std::views::transform([](const option_ptr_t &val) { return val.get(); }) |
+                       std::ranges::to<std::vector<const option_t *>>();
 
         if (filter)
         {
-            options.erase(std::remove_if(std::begin(options),
-                                         std::end(options),
-                                         [&filter](const Option *opt) { return !filter(opt); }),
-                          std::end(options));
+            std::erase_if(options, [&filter](const option_t *opt) { return !filter(opt); });
         }
+
         for (const auto &subcp : subcommands_)
         {
-            // also check down into nameless subcommands
-            const App *subc = subcp.get();
+            // Descend into merged option groups.
+            const app_t *subc = subcp.get();
             if (subc->get_name().empty() && !subc->get_group().empty() && subc->get_group().front() == '+')
             {
-                std::vector<const Option *> subcopts = subc->get_options(filter);
+                std::vector<const option_t *> subcopts = subc->get_options(filter);
                 options.insert(options.end(), subcopts.begin(), subcopts.end());
             }
         }
+
         if (fallthrough_ && parent_ != nullptr && !name_.empty())
         {
             const auto *fallthrough_parent = _get_fallthrough_parent();
-            std::vector<const Option *> subcopts = fallthrough_parent->get_options(filter);
+            std::vector<const option_t *> subcopts = fallthrough_parent->get_options(filter);
             for (const auto *opt : subcopts)
             {
-                if (std::find_if(options.begin(), options.end(), [opt](const Option *opt2) {
-                        return opt->check_name(opt2->get_name());
-                    }) == options.end())
+                if (std::ranges::none_of(options, [opt](const option_t *opt2)
+                                         { return opt->check_name(opt2->get_name()); }))
                 {
                     options.push_back(opt);
                 }
@@ -2835,37 +3688,35 @@ export namespace CLI
         return options;
     }
 
-    std::vector<Option *> App::get_options(const std::function<bool(Option *)> filter)
+    auto app_t::get_options(const std::function<bool(option_t *)> &filter) -> std::vector<option_t *>
     {
-        std::vector<Option *> options(options_.size());
-        std::transform(std::begin(options_), std::end(options_), std::begin(options), [](const Option_p &val) {
-            return val.get();
-        });
+        auto options = options_ | std::views::transform([](const option_ptr_t &val) { return val.get(); }) |
+                       std::ranges::to<std::vector<option_t *>>();
 
         if (filter)
         {
-            options.erase(
-                std::remove_if(std::begin(options), std::end(options), [&filter](Option *opt) { return !filter(opt); }),
-                std::end(options));
+            std::erase_if(options, [&filter](option_t *opt) { return !filter(opt); });
         }
+
         for (auto &subc : subcommands_)
         {
-            // also check down into nameless subcommands and specific groups
+            // NOTE: this condition is `||` while the const overload above uses `&&`.
+            // Preserved as written; see the accompanying notes.
             if (subc->get_name().empty() || (!subc->get_group().empty() && subc->get_group().front() == '+'))
             {
                 auto subcopts = subc->get_options(filter);
                 options.insert(options.end(), subcopts.begin(), subcopts.end());
             }
         }
+
         if (fallthrough_ && parent_ != nullptr && !name_.empty())
         {
             auto *fallthrough_parent = _get_fallthrough_parent();
-            std::vector<Option *> subcopts = fallthrough_parent->get_options(filter);
+            std::vector<option_t *> subcopts = fallthrough_parent->get_options(filter);
             for (auto *opt : subcopts)
             {
-                if (std::find_if(options.begin(), options.end(), [opt](Option *opt2) {
-                        return opt->check_name(opt2->get_name());
-                    }) == options.end())
+                if (std::ranges::none_of(options,
+                                         [opt](option_t *opt2) { return opt->check_name(opt2->get_name()); }))
                 {
                     options.push_back(opt);
                 }
@@ -2874,45 +3725,40 @@ export namespace CLI
         return options;
     }
 
-    /// Get an option by name
-    [[nodiscard]] const Option *App::get_option(std::string option_name) const
+    auto app_t::get_option(std::string option_name) const -> const option_t *
     {
         const auto *opt = get_option_no_throw(option_name);
         if (opt == nullptr)
         {
             if (fallthrough_ && parent_ != nullptr && name_.empty())
             {
-                // as a special case option groups with fallthrough enabled can also check the parent for options if the
-                // option is not found in the group this will not recurse as the internal call is to the no_throw
-                // version which will not check the parent again for option groups even with fallthrough enabled
+                // An option group with fallthrough may borrow the parent's options. This
+                // does not recurse: the call below is to the no-throw form, which does
+                // not consult the parent again for an option group.
                 return _get_fallthrough_parent()->get_option(option_name);
             }
-            throw OptionNotFound(option_name);
+            throw option_not_found_t(std::move(option_name));
         }
         return opt;
     }
 
-    /// Get an option by name (non-const version)
-    [[nodiscard]] Option *App::get_option(std::string option_name)
+    auto app_t::get_option(std::string option_name) -> option_t *
     {
         auto *opt = get_option_no_throw(option_name);
         if (opt == nullptr)
         {
             if (fallthrough_ && parent_ != nullptr && name_.empty())
             {
-                // as a special case option groups with fallthrough enabled can also check the parent for options if the
-                // option is not found in the group this will not recurse as the internal call is to the no_throw
-                // version which will not check the parent again for option groups even with fallthrough enabled
                 return _get_fallthrough_parent()->get_option(option_name);
             }
-            throw OptionNotFound(option_name);
+            throw option_not_found_t(std::move(option_name));
         }
         return opt;
     }
 
-    [[nodiscard]] Option *App::get_option_no_throw(std::string option_name) noexcept
+    auto app_t::get_option_no_throw(std::string option_name) noexcept -> option_t *
     {
-        for (Option_p &opt : options_)
+        for (option_ptr_t &opt : options_)
         {
             if (opt->check_name(option_name))
             {
@@ -2921,7 +3767,7 @@ export namespace CLI
         }
         for (auto &subc : subcommands_)
         {
-            // also check down into nameless subcommands
+            // Descend into option groups, which have no name of their own.
             if (subc->get_name().empty())
             {
                 auto *opt = subc->get_option_no_throw(option_name);
@@ -2933,16 +3779,14 @@ export namespace CLI
         }
         if (fallthrough_ && parent_ != nullptr && !name_.empty())
         {
-            // if there is fallthrough and a parent and this is not an option_group then also check the parent for the
-            // option
             return _get_fallthrough_parent()->get_option_no_throw(option_name);
         }
         return nullptr;
     }
 
-    [[nodiscard]] const Option *App::get_option_no_throw(std::string option_name) const noexcept
+    auto app_t::get_option_no_throw(std::string option_name) const noexcept -> const option_t *
     {
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
             if (opt->check_name(option_name))
             {
@@ -2951,10 +3795,10 @@ export namespace CLI
         }
         for (const auto &subc : subcommands_)
         {
-            // also check down into nameless subcommands
+            // Descend into option groups, which have no name of their own.
             if (subc->get_name().empty())
             {
-                auto *opt = subc->get_option_no_throw(option_name);
+                const auto *opt = subc->get_option_no_throw(option_name);
                 if (opt != nullptr)
                 {
                     return opt;
@@ -2968,7 +3812,7 @@ export namespace CLI
         return nullptr;
     }
 
-    [[nodiscard]] std::string App::get_display_name(bool with_aliases) const
+    auto app_t::get_display_name(bool with_aliases) const -> std::string
     {
         if (name_.empty())
         {
@@ -2981,20 +3825,19 @@ export namespace CLI
         std::string dispname = name_;
         for (const auto &lalias : aliases_)
         {
-            dispname.push_back(',');
-            dispname.push_back(' ');
+            dispname.append(", ");
             dispname.append(lalias);
         }
         return dispname;
     }
 
-    [[nodiscard]] bool App::check_name(std::string name_to_check) const
+    auto app_t::check_name(std::string name_to_check) const -> bool
     {
-        auto result = check_name_detail(std::move(name_to_check));
-        return (result != NameMatch::none);
+        const auto result = check_name_detail(std::move(name_to_check));
+        return (result != name_match_t::none);
     }
 
-    [[nodiscard]] App::NameMatch App::check_name_detail(std::string name_to_check) const
+    auto app_t::check_name_detail(std::string name_to_check) const -> app_t::name_match_t
     {
         std::string local_name = name_;
         if (ignore_underscore_)
@@ -3004,23 +3847,29 @@ export namespace CLI
         }
         if (ignore_case_)
         {
+            // NOTE: this reads from name_ rather than from local_name, so when both
+            // ignore_underscore_ and ignore_case_ are set the underscore removal above
+            // is discarded on this side while still being applied to name_to_check.
+            // Preserved as written; see the accompanying notes.
             local_name = detail::to_lower(name_);
             name_to_check = detail::to_lower(name_to_check);
         }
 
         if (local_name == name_to_check)
         {
-            return App::NameMatch::exact;
+            return name_match_t::exact;
         }
         if (allow_prefix_matching_ && name_to_check.size() < local_name.size())
         {
             if (local_name.compare(0, name_to_check.size(), name_to_check) == 0)
             {
-                return App::NameMatch::prefix;
+                return name_match_t::prefix;
             }
         }
-        for (std::string les : aliases_)
-        { // NOLINT(performance-for-range-copy)
+
+        // Copied deliberately: each alias is folded in place before comparison.
+        for (std::string les : aliases_) // NOLINT(performance-for-range-copy)
+        {
             if (ignore_underscore_)
             {
                 les = detail::remove_underscore(les);
@@ -3031,27 +3880,26 @@ export namespace CLI
             }
             if (les == name_to_check)
             {
-                return App::NameMatch::exact;
+                return name_match_t::exact;
             }
             if (allow_prefix_matching_ && name_to_check.size() < les.size())
             {
                 if (les.compare(0, name_to_check.size(), name_to_check) == 0)
                 {
-                    return App::NameMatch::prefix;
+                    return name_match_t::prefix;
                 }
             }
         }
-        return App::NameMatch::none;
+        return name_match_t::none;
     }
 
-    [[nodiscard]] std::vector<std::string> App::get_groups() const
+    auto app_t::get_groups() const -> std::vector<std::string>
     {
         std::vector<std::string> groups;
 
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
-            // Add group if it is not already in there
-            if (std::find(groups.begin(), groups.end(), opt->get_group()) == groups.end())
+            if (!std::ranges::contains(groups, opt->get_group()))
             {
                 groups.push_back(opt->get_group());
             }
@@ -3060,57 +3908,58 @@ export namespace CLI
         return groups;
     }
 
-    [[nodiscard]] std::vector<std::string> App::remaining(bool recurse) const
+    auto app_t::remaining(bool recurse) const -> std::vector<std::string>
     {
         std::vector<std::string> miss_list;
-        for (const std::pair<detail::Classifier, std::string> &miss : missing_)
+        miss_list.reserve(missing_.size());
+        for (const auto &[classification, value] : missing_)
         {
-            miss_list.push_back(std::get<1>(miss));
+            miss_list.push_back(value);
         }
-        // Get from a subcommand that may allow extras
+
         if (recurse)
         {
-            if (allow_extras_ == ExtrasMode::Error || allow_extras_ == ExtrasMode::Ignore)
+            // An option group cannot report its own extras, so collect them here when
+            // this application is not itself capturing them.
+            if (allow_extras_ == extras_mode_t::error || allow_extras_ == extras_mode_t::ignore)
             {
                 for (const auto &sub : subcommands_)
                 {
                     if (sub->name_.empty() && !sub->missing_.empty())
                     {
-                        for (const std::pair<detail::Classifier, std::string> &miss : sub->missing_)
+                        for (const auto &[classification, value] : sub->missing_)
                         {
-                            miss_list.push_back(std::get<1>(miss));
+                            miss_list.push_back(value);
                         }
                     }
                 }
             }
-            // Recurse into subcommands
 
-            for (const App *sub : parsed_subcommands_)
+            for (const app_t *sub : parsed_subcommands_)
             {
-                std::vector<std::string> output = sub->remaining(recurse);
-                std::copy(std::begin(output), std::end(output), std::back_inserter(miss_list));
+                const std::vector<std::string> output = sub->remaining(recurse);
+                miss_list.insert(miss_list.end(), output.begin(), output.end());
             }
         }
         return miss_list;
     }
 
-    [[nodiscard]] std::vector<std::string> App::remaining_for_passthrough(bool recurse) const
+    auto app_t::remaining_for_passthrough(bool recurse) const -> std::vector<std::string>
     {
         std::vector<std::string> miss_list = remaining(recurse);
-        std::reverse(std::begin(miss_list), std::end(miss_list));
+        std::ranges::reverse(miss_list);
         return miss_list;
     }
 
-    [[nodiscard]] std::size_t App::remaining_size(bool recurse) const
+    auto app_t::remaining_size(bool recurse) const -> std::size_t
     {
-        auto remaining_options = static_cast<std::size_t>(std::count_if(
-            std::begin(missing_), std::end(missing_), [](const std::pair<detail::Classifier, std::string> &val) {
-                return val.first != detail::Classifier::POSITIONAL_MARK;
-            }));
+        auto remaining_options = static_cast<std::size_t>(
+            std::ranges::count_if(missing_, [](const std::pair<detail::classifier_t, std::string> &val)
+                                  { return val.first != detail::classifier_t::positional_mark; }));
 
         if (recurse)
         {
-            for (const App_p &sub : subcommands_)
+            for (const app_ptr_t &sub : subcommands_)
             {
                 remaining_options += sub->remaining_size(recurse);
             }
@@ -3118,30 +3967,33 @@ export namespace CLI
         return remaining_options;
     }
 
-    void App::_validate() const
+    auto app_t::_validate() const -> void
     {
-        // count the number of positional only args
-        auto pcount = std::count_if(std::begin(options_), std::end(options_), [](const Option_p &opt) {
+        // More than one unbounded positional cannot be told apart, unless all but one
+        // are required and therefore consume a fixed share.
+        const auto pcount = std::ranges::count_if(options_, [](const option_ptr_t &opt) {
             return opt->get_items_expected_max() >= detail::expected_max_vector_size && !opt->nonpositional();
         });
         if (pcount > 1)
         {
-            auto pcount_req = std::count_if(std::begin(options_), std::end(options_), [](const Option_p &opt) {
+            const auto pcount_req = std::ranges::count_if(options_, [](const option_ptr_t &opt) {
                 return opt->get_items_expected_max() >= detail::expected_max_vector_size && !opt->nonpositional() &&
                        opt->get_required();
             });
             if (pcount - pcount_req > 1)
             {
-                throw InvalidError(name_);
+                throw invalid_error_t(name_);
             }
         }
 
         std::size_t nameless_subs {0};
-        for (const App_p &app : subcommands_)
+        for (const app_ptr_t &app : subcommands_)
         {
             app->_validate();
             if (app->get_name().empty())
+            {
                 ++nameless_subs;
+            }
         }
 
         if (require_option_min_ > 0)
@@ -3150,29 +4002,30 @@ export namespace CLI
             {
                 if (require_option_max_ < require_option_min_)
                 {
-                    throw(InvalidError("Required min options greater than required max options",
-                                       ExitCodes::InvalidError));
+                    throw invalid_error_t("Required min options greater than required max options",
+                                          exit_codes_t::invalid_error);
                 }
             }
             if (require_option_min_ > (options_.size() + nameless_subs))
             {
-                throw(InvalidError("Required min options greater than number of available options",
-                                   ExitCodes::InvalidError));
+                throw invalid_error_t("Required min options greater than number of available options",
+                                      exit_codes_t::invalid_error);
             }
         }
     }
 
-    void App::_configure()
+    auto app_t::_configure() -> void
     {
-        if (default_startup == startup_mode::enabled)
+        if (default_startup == startup_mode_t::enabled)
         {
             disabled_ = false;
         }
-        else if (default_startup == startup_mode::disabled)
+        else if (default_startup == startup_mode_t::disabled)
         {
             disabled_ = true;
         }
-        for (const App_p &app : subcommands_)
+
+        for (const app_ptr_t &app : subcommands_)
         {
             if (app->has_automatic_name_)
             {
@@ -3180,32 +4033,35 @@ export namespace CLI
             }
             if (app->name_.empty())
             {
-                app->fallthrough_ = false; // make sure fallthrough_ is false to prevent infinite loop
-                app->prefix_command_ = PrefixCommandMode::Off;
+                // An unnamed subcommand must not fall through, or lookups would cycle
+                // between it and its parent.
+                app->fallthrough_ = false;
+                app->prefix_command_ = prefix_command_mode_t::off;
             }
-            // make sure the parent is set to be this object in preparation for parse
             app->parent_ = this;
             app->_configure();
         }
     }
 
-    void App::run_callback(bool final_mode, bool suppress_final_callback)
+    auto app_t::run_callback(bool final_mode, bool suppress_final_callback) -> void
     {
         pre_callback();
-        // in the main app if immediate_callback_ is set it runs the main callback before the used subcommands
+
+        // With immediate_callback_ set, the parse-complete callback runs ahead of the
+        // subcommands rather than after them.
         if (!final_mode && parse_complete_callback_)
         {
             parse_complete_callback_();
         }
-        // run the callbacks for the received subcommands
-        for (App *subc : get_subcommands())
+
+        for (app_t *subc : get_subcommands())
         {
             if (subc->parent_ == this)
             {
                 subc->run_callback(true, suppress_final_callback);
             }
         }
-        // now run callbacks for option_groups
+
         for (auto &subc : subcommands_)
         {
             if (subc->name_.empty() && subc->count_all() > 0)
@@ -3214,7 +4070,6 @@ export namespace CLI
             }
         }
 
-        // finally run the main callback
         if (final_callback_ && (parsed_ > 0) && (!suppress_final_callback))
         {
             if (!name_.empty() || count_all() > 0 || parent_ == nullptr)
@@ -3224,9 +4079,10 @@ export namespace CLI
         }
     }
 
-    [[nodiscard]] bool App::_valid_subcommand(const std::string &current, bool ignore_used) const
+    auto app_t::_valid_subcommand(const std::string &current, bool ignore_used) const -> bool
     {
-        // Don't match if max has been reached - but still check parents
+        // Once the subcommand maximum is reached this application stops matching, but a
+        // parent may still be willing to.
         if (require_subcommand_max_ != 0 && parsed_subcommands_.size() >= require_subcommand_max_ &&
             subcommand_fallthrough_)
         {
@@ -3237,7 +4093,6 @@ export namespace CLI
         {
             return true;
         }
-        // Check parent if exists, else return false
         if (subcommand_fallthrough_)
         {
             return parent_ != nullptr && parent_->_valid_subcommand(current, ignore_used);
@@ -3245,174 +4100,188 @@ export namespace CLI
         return false;
     }
 
-    [[nodiscard]] detail::Classifier App::_recognize(const std::string &current, bool ignore_used_subcommands) const
+    auto app_t::_recognize(const std::string &current, bool ignore_used_subcommands) const -> detail::classifier_t
     {
-        std::string dummy1, dummy2;
-
         if (current == "--")
-            return detail::Classifier::POSITIONAL_MARK;
-        if (_valid_subcommand(current, ignore_used_subcommands))
-            return detail::Classifier::SUBCOMMAND;
-        if (detail::split_long(current, dummy1, dummy2))
-            return detail::Classifier::LONG;
-        if (detail::split_short(current, dummy1, dummy2))
         {
-            if ((dummy1[0] >= '0' && dummy1[0] <= '9') ||
-                (dummy1[0] == '.' && !dummy2.empty() && (dummy2[0] >= '0' && dummy2[0] <= '9')))
+            return detail::classifier_t::positional_mark;
+        }
+        if (_valid_subcommand(current, ignore_used_subcommands))
+        {
+            return detail::classifier_t::subcommand;
+        }
+        if (detail::split_long(current))
+        {
+            return detail::classifier_t::long_;
+        }
+        if (const auto res = detail::split_short(current))
+        {
+            const auto &[sname, rest] = *res;
+            if ((sname[0] >= '0' && sname[0] <= '9') ||
+                (sname[0] == '.' && !rest.empty() && (rest[0] >= '0' && rest[0] <= '9')))
             {
-                // it looks like a number but check if it could be an option
-                if (get_option_no_throw(std::string {'-', dummy1[0]}) == nullptr)
+                // Looks like a negative number rather than an option, unless an option
+                // with that single-character name actually exists.
+                if (get_option_no_throw(std::string {'-', sname[0]}) == nullptr)
                 {
-                    return detail::Classifier::NONE;
+                    return detail::classifier_t::none;
                 }
             }
-            return detail::Classifier::SHORT;
+            return detail::classifier_t::short_;
         }
-        if ((allow_windows_style_options_) && (detail::split_windows_style(current, dummy1, dummy2)))
-            return detail::Classifier::WINDOWS_STYLE;
+        if (allow_windows_style_options_ && detail::split_windows_style(current))
+        {
+            return detail::classifier_t::windows_style;
+        }
         if ((current == "++") && !name_.empty() && parent_ != nullptr)
-            return detail::Classifier::SUBCOMMAND_TERMINATOR;
-        auto dotloc = current.find_first_of('.');
+        {
+            return detail::classifier_t::subcommand_terminator;
+        }
+
+        // A dotted token may address a subcommand's subcommand.
+        const auto dotloc = current.find_first_of('.');
         if (dotloc != std::string::npos)
         {
             auto *cm = _find_subcommand(current.substr(0, dotloc), true, ignore_used_subcommands);
             if (cm != nullptr)
             {
-                auto res = cm->_recognize(current.substr(dotloc + 1), ignore_used_subcommands);
-                if (res == detail::Classifier::SUBCOMMAND)
+                const auto res = cm->_recognize(current.substr(dotloc + 1), ignore_used_subcommands);
+                if (res == detail::classifier_t::subcommand)
                 {
                     return res;
                 }
             }
         }
-        return detail::Classifier::NONE;
+        return detail::classifier_t::none;
     }
 
-    bool App::_process_config_file(const std::string &config_file, bool throw_error)
+    auto app_t::_process_config_file(const std::string &config_file, bool throw_error) -> bool
     {
-        auto path_result = detail::check_path(config_file.c_str());
-        if (path_result == detail::path_type::file)
+        const auto path_result = detail::check_path(config_file);
+        if (path_result != detail::path_type_t::file)
         {
-            try
+            if (throw_error)
             {
-                std::vector<ConfigItem> values = config_formatter_->from_file(config_file);
-                _parse_config(values);
-                return true;
+                throw file_error_t::missing(config_file);
             }
-            catch (const FileError &)
+            return false;
+        }
+
+        try
+        {
+            const std::vector<config_item_t> values = config_formatter_->from_file(config_file);
+            _parse_config(values);
+            return true;
+        }
+        catch (const file_error_t &)
+        {
+            if (throw_error)
             {
-                if (throw_error)
-                {
-                    throw;
-                }
-                return false;
+                throw;
             }
-        }
-        else if (throw_error)
-        {
-            throw FileError::Missing(config_file);
-        }
-        else
-        {
             return false;
         }
     }
 
-    void App::_process_config_file()
+    auto app_t::_process_config_file() -> void
     {
-        if (config_ptr_ != nullptr)
+        if (config_ptr_ == nullptr)
         {
-            bool config_required = config_ptr_->get_required();
-            auto file_given = config_ptr_->count() > 0;
-            if (!(file_given || config_ptr_->envname_.empty()))
-            {
-                std::string ename_string = detail::get_environment_value(config_ptr_->envname_);
-                if (!ename_string.empty())
-                {
-                    config_ptr_->add_result(ename_string);
-                }
-            }
-            config_ptr_->run_callback();
+            return;
+        }
 
-            auto config_files = config_ptr_->as<std::vector<std::string>>();
-            bool files_used {file_given};
-            if (config_files.empty() || config_files.front().empty())
+        const bool config_required = config_ptr_->get_required();
+        const auto file_given = config_ptr_->count() > 0;
+        if (!(file_given || config_ptr_->envname_.empty()))
+        {
+            std::string ename_string = detail::get_environment_value(config_ptr_->envname_);
+            if (!ename_string.empty())
             {
-                if (config_required)
-                {
-                    throw FileError("config file is required but none was given");
-                }
-                return;
+                config_ptr_->add_result(std::move(ename_string));
             }
-            for (const auto &config_file : config_files)
+        }
+        config_ptr_->run_callback();
+
+        const auto config_files = config_ptr_->as<std::vector<std::string>>();
+        bool files_used {file_given};
+        if (config_files.empty() || config_files.front().empty())
+        {
+            if (config_required)
             {
-                if (_process_config_file(config_file, config_required || file_given))
-                {
-                    files_used = true;
-                }
+                throw file_error_t("config file is required but none was given");
             }
-            if (!files_used)
+            return;
+        }
+
+        for (const auto &config_file : config_files)
+        {
+            if (_process_config_file(config_file, config_required || file_given))
             {
-                // this is done so the count shows as 0 if no callbacks were processed
-                config_ptr_->clear();
-                bool force = config_ptr_->force_callback_;
-                config_ptr_->force_callback_ = false;
-                config_ptr_->run_callback();
-                config_ptr_->force_callback_ = force;
+                files_used = true;
             }
+        }
+
+        if (!files_used)
+        {
+            // Reset so that the option reports a count of zero when nothing was read.
+            config_ptr_->clear();
+            const bool force = config_ptr_->force_callback_;
+            config_ptr_->force_callback_ = false;
+            config_ptr_->run_callback();
+            config_ptr_->force_callback_ = force;
         }
     }
 
-    void App::_process_env()
+    auto app_t::_process_env() -> void
     {
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
             if (opt->count() == 0 && !opt->envname_.empty())
             {
                 std::string ename_string = detail::get_environment_value(opt->envname_);
                 if (!ename_string.empty())
                 {
-                    std::string result = ename_string;
-                    result = opt->_validate(result, 0);
-                    if (result.empty())
+                    // _validate may rewrite its argument, so it gets a copy; the value
+                    // actually stored is the untouched environment string.
+                    std::string candidate = ename_string;
+                    const std::string err = opt->_validate(candidate, 0);
+                    if (err.empty())
                     {
-                        opt->add_result(ename_string);
+                        opt->add_result(std::move(ename_string));
                     }
                 }
             }
         }
 
-        for (App_p &sub : subcommands_)
+        for (app_ptr_t &sub : subcommands_)
         {
+            // Only descend once a subcommand's own callback has already fired.
             if (sub->get_name().empty() || (sub->count_all() > 0 && !sub->parse_complete_callback_))
             {
-                // only process environment variables if the callback has actually been triggered already
                 sub->_process_env();
             }
         }
     }
 
-    void App::_process_callbacks(CallbackPriority priority)
+    auto app_t::_process_callbacks(callback_priority_t priority) -> void
     {
-
-        for (App_p &sub : subcommands_)
+        for (app_ptr_t &sub : subcommands_)
         {
-            // process the priority option_groups first
+            // Option groups carrying their own callback go first.
             if (sub->get_name().empty() && sub->parse_complete_callback_)
             {
                 if (sub->count_all() > 0)
                 {
                     sub->_process_callbacks(priority);
-                    if (priority == CallbackPriority::Normal)
+                    if (priority == callback_priority_t::normal)
                     {
-                        // only run the subcommand callback at normal priority
                         sub->run_callback();
                     }
                 }
             }
         }
 
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
             if (opt->get_callback_priority() == priority)
             {
@@ -3422,7 +4291,8 @@ export namespace CLI
                 }
             }
         }
-        for (App_p &sub : subcommands_)
+
+        for (app_ptr_t &sub : subcommands_)
         {
             if (!sub->parse_complete_callback_)
             {
@@ -3431,10 +4301,11 @@ export namespace CLI
         }
     }
 
-    void App::_process_help_flags(CallbackPriority priority, bool trigger_help, bool trigger_all_help) const
+    auto app_t::_process_help_flags(callback_priority_t priority, bool trigger_help,
+                                    bool trigger_all_help) const -> void
     {
-        const Option *help_ptr = get_help_ptr();
-        const Option *help_all_ptr = get_help_all_ptr();
+        const option_t *help_ptr = get_help_ptr();
+        const option_t *help_all_ptr = get_help_all_ptr();
 
         if (help_ptr != nullptr && help_ptr->count() > 0 && help_ptr->get_callback_priority() == priority)
         {
@@ -3445,29 +4316,28 @@ export namespace CLI
             trigger_all_help = true;
         }
 
-        // If there were parsed subcommands, call those. First subcommand wins if there are multiple ones.
         if (!parsed_subcommands_.empty())
         {
-            for (const App *sub : parsed_subcommands_)
+            // Only the deepest subcommand actually calls for help; the flags carry the
+            // request down to it.
+            for (const app_t *sub : parsed_subcommands_)
             {
                 sub->_process_help_flags(priority, trigger_help, trigger_all_help);
             }
-
-            // Only the final subcommand should call for help. All help wins over help.
         }
         else if (trigger_all_help)
         {
-            throw CallForAllHelp();
+            // Expanded help wins over ordinary help.
+            throw call_for_all_help_t();
         }
         else if (trigger_help)
         {
-            throw CallForHelp();
+            throw call_for_help_t();
         }
     }
 
-    void App::_process_requirements()
+    auto app_t::_process_requirements() -> void
     {
-        // check excludes
         bool excluded {false};
         std::string excluder;
         for (const auto &opt : exclude_options_)
@@ -3490,13 +4360,12 @@ export namespace CLI
         {
             if (count_all() > 0)
             {
-                throw ExcludesError(get_display_name(), excluder);
+                throw excludes_error_t(get_display_name(), excluder);
             }
-            // if we are excluded but didn't receive anything, just return
+            // Excluded, but unused, so there is nothing to conflict with.
             return;
         }
 
-        // check excludes
         bool missing_needed {false};
         std::string missing_need;
         for (const auto &opt : need_options_)
@@ -3519,50 +4388,59 @@ export namespace CLI
         {
             if (count_all() > 0)
             {
-                throw RequiresError(get_display_name(), missing_need);
+                throw requires_error_t(get_display_name(), missing_need);
             }
-            // if we missing something but didn't have any options, just return
+            // A dependency is unmet, but nothing here was used, so it does not matter.
             return;
         }
 
         std::size_t used_options = 0;
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
-
             if (opt->count() != 0)
             {
                 ++used_options;
             }
-            // Required but empty
             if (opt->get_required() && opt->count() == 0)
             {
-                throw RequiredError(opt->get_name());
+                throw required_error_t(opt->get_name());
             }
-            // Requires
-            for (const Option *opt_req : opt->needs_)
+            for (const option_t *opt_req : opt->needs_)
+            {
                 if (opt->count() > 0 && opt_req->count() == 0)
-                    throw RequiresError(opt->get_name(), opt_req->get_name());
-            // Excludes
-            for (const Option *opt_ex : opt->excludes_)
+                {
+                    throw requires_error_t(opt->get_name(), opt_req->get_name());
+                }
+            }
+            for (const option_t *opt_ex : opt->excludes_)
+            {
                 if (opt->count() > 0 && opt_ex->count() != 0)
-                    throw ExcludesError(opt->get_name(), opt_ex->get_name());
+                {
+                    throw excludes_error_t(opt->get_name(), opt_ex->get_name());
+                }
+            }
         }
-        // check for the required number of subcommands
+
         if (require_subcommand_min_ > 0)
         {
-            auto selected_subcommands = get_subcommands();
+            const auto &selected_subcommands = get_subcommands();
             if (require_subcommand_min_ > selected_subcommands.size())
-                throw RequiredError::Subcommand(require_subcommand_min_);
+            {
+                throw required_error_t::subcommand(require_subcommand_min_);
+            }
         }
 
-        // Max error cannot occur, the extra subcommand will parse as an ExtrasError or a remaining item.
+        // There is no maximum check here: a surplus subcommand surfaces later as an
+        // extras error or as a remaining argument.
 
-        // run this loop to check how many unnamed subcommands were actually used since they are considered options
-        // from the perspective of an App
-        for (App_p &sub : subcommands_)
+        // An unnamed subcommand counts as an option from this application's point of
+        // view, so fold the used ones into the option tally.
+        for (app_ptr_t &sub : subcommands_)
         {
             if (sub->disabled_)
+            {
                 continue;
+            }
             if (sub->name_.empty() && sub->count_all() > 0)
             {
                 ++used_options;
@@ -3571,7 +4449,7 @@ export namespace CLI
 
         if (require_option_min_ > used_options || (require_option_max_ > 0 && require_option_max_ < used_options))
         {
-            auto option_list = detail::join(options_, [this](const Option_p &ptr) {
+            auto option_list = detail::join(options_, [this](const option_ptr_t &ptr) {
                 if (ptr.get() == help_ptr_ || ptr.get() == help_all_ptr_)
                 {
                     return std::string {};
@@ -3579,34 +4457,34 @@ export namespace CLI
                 return ptr->get_name(false, true);
             });
 
-            auto subc_list = get_subcommands([](App *app) { return ((app->get_name().empty()) && (!app->disabled_)); });
+            const auto subc_list =
+                get_subcommands([](app_t *app) { return ((app->get_name().empty()) && (!app->disabled_)); });
             if (!subc_list.empty())
             {
-                option_list += "," + detail::join(subc_list, [](const App *app) { return app->get_display_name(); });
+                option_list += "," + detail::join(subc_list, [](const app_t *app) { return app->get_display_name(); });
             }
-            throw RequiredError::Option(require_option_min_, require_option_max_, used_options, option_list);
+            throw required_error_t::option(require_option_min_, require_option_max_, used_options, option_list);
         }
 
-        // now process the requirements for subcommands if needed
-        for (App_p &sub : subcommands_)
+        for (app_ptr_t &sub : subcommands_)
         {
             if (sub->disabled_)
-                continue;
-            if (sub->name_.empty() && sub->required_ == false)
             {
+                continue;
+            }
+            if (sub->name_.empty() && !sub->required_)
+            {
+                // An empty, optional option group is skipped once the enclosing
+                // requirement is already satisfied.
                 if (sub->count_all() == 0)
                 {
                     if (require_option_min_ > 0 && require_option_min_ <= used_options)
                     {
                         continue;
-                        // if we have met the requirement and there is nothing in this option group skip checking
-                        // requirements
                     }
                     if (require_option_max_ > 0 && used_options >= require_option_min_)
                     {
                         continue;
-                        // if we have met the requirement and there is nothing in this option group skip checking
-                        // requirements
                     }
                 }
             }
@@ -3617,94 +4495,100 @@ export namespace CLI
 
             if (sub->required_ && sub->count_all() == 0)
             {
-                throw(CLI::RequiredError(sub->get_display_name()));
+                throw required_error_t(sub->get_display_name());
             }
         }
     }
 
-    void App::_process()
+    auto app_t::_process() -> void
     {
-        // help takes precedence over other potential errors and config and environment shouldn't be processed if help
-        // throws
-        _process_callbacks(CallbackPriority::FirstPreHelp);
-        _process_help_flags(CallbackPriority::First);
-        _process_callbacks(CallbackPriority::First);
+        // Help outranks every other error, and neither the configuration file nor the
+        // environment should be consulted if help is going to be thrown.
+        _process_callbacks(callback_priority_t::first_pre_help);
+        _process_help_flags(callback_priority_t::first);
+        _process_callbacks(callback_priority_t::first);
 
         std::exception_ptr config_exception;
         try
         {
-            // the config file might generate a FileError but that should not be processed until later in the process
-            // to allow for help, version and other errors to generate first.
+            // A missing configuration file is held back so that help, version, and
+            // other errors get a chance to surface first.
             _process_config_file();
 
-            // process env shouldn't throw but no reason to process it if config generated an error
+            // Reading the environment should not throw, but there is no point doing it
+            // if the configuration file already failed.
             _process_env();
         }
-        catch (const CLI::FileError &)
+        catch (const file_error_t &)
         {
             config_exception = std::current_exception();
         }
-        // callbacks and requirements processing can generate exceptions which should take priority
-        // over the config file error if one exists.
-        _process_callbacks(CallbackPriority::PreRequirementsCheckPreHelp);
-        _process_help_flags(CallbackPriority::PreRequirementsCheck);
-        _process_callbacks(CallbackPriority::PreRequirementsCheck);
+
+        // Callback and requirement errors outrank the held-back configuration error.
+        _process_callbacks(callback_priority_t::pre_requirements_check_pre_help);
+        _process_help_flags(callback_priority_t::pre_requirements_check);
+        _process_callbacks(callback_priority_t::pre_requirements_check);
 
         _process_requirements();
 
-        _process_callbacks(CallbackPriority::NormalPreHelp);
-        _process_help_flags(CallbackPriority::Normal);
-        _process_callbacks(CallbackPriority::Normal);
+        _process_callbacks(callback_priority_t::normal_pre_help);
+        _process_help_flags(callback_priority_t::normal);
+        _process_callbacks(callback_priority_t::normal);
 
         if (config_exception)
         {
             std::rethrow_exception(config_exception);
         }
 
-        _process_callbacks(CallbackPriority::LastPreHelp);
-        _process_help_flags(CallbackPriority::Last);
-        _process_callbacks(CallbackPriority::Last);
+        _process_callbacks(callback_priority_t::last_pre_help);
+        _process_help_flags(callback_priority_t::last);
+        _process_callbacks(callback_priority_t::last);
     }
 
-    void App::_process_extras()
+    auto app_t::_process_extras() -> void
     {
-        if (allow_extras_ == ExtrasMode::Error && prefix_command_ == PrefixCommandMode::Off)
+        if (allow_extras_ == extras_mode_t::error && prefix_command_ == prefix_command_mode_t::off)
         {
-            std::size_t num_left_over = remaining_size();
-            if (num_left_over > 0)
+            if (remaining_size() > 0)
             {
-                throw ExtrasError(name_, remaining(false));
+                throw extras_error_t(name_, remaining(false));
             }
         }
-        if (allow_extras_ == ExtrasMode::Error && prefix_command_ == PrefixCommandMode::SeparatorOnly)
+        if (allow_extras_ == extras_mode_t::error && prefix_command_ == prefix_command_mode_t::separator_only)
         {
-            std::size_t num_left_over = remaining_size();
-            if (num_left_over > 0)
+            if (remaining_size() > 0)
             {
-                if (remaining(false).front() != "--")
+                // In separator-only mode a leading `--` is the sanctioned way to pass
+                // arguments through, so only anything else is an error.
+                auto left_over = remaining(false);
+                if (left_over.front() != "--")
                 {
-                    throw ExtrasError(name_, remaining(false));
+                    throw extras_error_t(name_, std::move(left_over));
                 }
             }
         }
-        for (App_p &sub : subcommands_)
+        for (app_ptr_t &sub : subcommands_)
         {
             if (sub->count() > 0)
+            {
                 sub->_process_extras();
+            }
         }
     }
 
-    void App::increment_parsed()
+    auto app_t::increment_parsed() -> void
     {
         ++parsed_;
-        for (App_p &sub : subcommands_)
+        for (app_ptr_t &sub : subcommands_)
         {
             if (sub->get_name().empty())
+            {
                 sub->increment_parsed();
+            }
         }
     }
 
-    void App::_parse(std::vector<std::string> &args)
+    auto app_t::_parse(std::vector<std::string> &args) -> void
     {
         increment_parsed();
         _trigger_pre_parse(args.size());
@@ -3721,36 +4605,36 @@ export namespace CLI
         if (parent_ == nullptr)
         {
             _process();
-
-            // Throw error if any items are left over (depending on settings)
             _process_extras();
-            // Convert missing (pairs) to extras (string only) ready for processing in another app
+            // Reduce the classified leftovers to plain strings, ready for another parser.
             args = remaining_for_passthrough(false);
         }
         else if (parse_complete_callback_)
         {
-            _process_callbacks(CallbackPriority::FirstPreHelp);
-            _process_help_flags(CallbackPriority::First);
-            _process_callbacks(CallbackPriority::First);
+            // The same sequence as _process, minus the configuration file, which only
+            // the root application reads.
+            _process_callbacks(callback_priority_t::first_pre_help);
+            _process_help_flags(callback_priority_t::first);
+            _process_callbacks(callback_priority_t::first);
             _process_env();
-            _process_callbacks(CallbackPriority::PreRequirementsCheckPreHelp);
-            _process_help_flags(CallbackPriority::PreRequirementsCheck);
-            _process_callbacks(CallbackPriority::PreRequirementsCheck);
+            _process_callbacks(callback_priority_t::pre_requirements_check_pre_help);
+            _process_help_flags(callback_priority_t::pre_requirements_check);
+            _process_callbacks(callback_priority_t::pre_requirements_check);
             _process_requirements();
-            _process_callbacks(CallbackPriority::NormalPreHelp);
-            _process_help_flags(CallbackPriority::Normal);
-            _process_callbacks(CallbackPriority::Normal);
-            _process_callbacks(CallbackPriority::LastPreHelp);
-            _process_help_flags(CallbackPriority::Last);
-            _process_callbacks(CallbackPriority::Last);
+            _process_callbacks(callback_priority_t::normal_pre_help);
+            _process_help_flags(callback_priority_t::normal);
+            _process_callbacks(callback_priority_t::normal);
+            _process_callbacks(callback_priority_t::last_pre_help);
+            _process_help_flags(callback_priority_t::last);
+            _process_callbacks(callback_priority_t::last);
             run_callback(false, true);
         }
     }
 
-    void App::_parse(std::vector<std::string> &&args)
+    auto app_t::_parse(std::vector<std::string> &&args) -> void
     {
-        // this can only be called by the top level in which case parent == nullptr by definition
-        // operation is simplified
+        // Only reachable from the top level, where parent_ is null by definition, so
+        // the fallthrough handling above is not needed.
         increment_parsed();
         _trigger_pre_parse(args.size());
         bool positional_only = false;
@@ -3760,42 +4644,40 @@ export namespace CLI
             _parse_single(args, positional_only);
         }
         _process();
-
-        // Throw error if any items are left over (depending on settings)
         _process_extras();
     }
 
-    void App::_parse_stream(std::istream &input)
+    auto app_t::_parse_stream(std::istream &input) -> void
     {
-        auto values = config_formatter_->from_config(input);
+        const auto values = config_formatter_->from_config(input);
         _parse_config(values);
         increment_parsed();
         _trigger_pre_parse(values.size());
         _process();
-
-        // Throw error if any items are left over (depending on settings)
         _process_extras();
     }
 
-    void App::_parse_config(const std::vector<ConfigItem> &args)
+    auto app_t::_parse_config(const std::vector<config_item_t> &args) -> void
     {
-        for (const ConfigItem &item : args)
+        for (const config_item_t &item : args)
         {
-            if (!_parse_single_config(item) && allow_config_extras_ == ConfigExtrasMode::Error)
-                throw ConfigError::Extras(item.fullname());
+            if (!_parse_single_config(item) && allow_config_extras_ == config_extras_mode_t::error)
+            {
+                throw config_error_t::extras(item.fullname());
+            }
         }
     }
 
-    bool App::_add_flag_like_result(Option *op, const ConfigItem &item, const std::vector<std::string> &inputs)
+    auto app_t::_add_flag_like_result(option_t *op, const config_item_t &item,
+                                      const std::vector<std::string> &inputs) -> bool
     {
         if (item.inputs.size() <= 1)
         {
-            // Flag parsing
             auto res = config_formatter_->to_flag(item);
             bool converted {false};
             if (op->get_disable_flag_override())
             {
-                auto val = detail::to_flag_value(res);
+                const auto val = detail::to_flag_value(res);
                 if (val == 1)
                 {
                     res = op->get_flag_value(item.name, "{}");
@@ -3812,24 +4694,26 @@ export namespace CLI
                 }
             }
 
-            op->add_result(res);
+            op->add_result(std::move(res));
             return true;
         }
+
         if (static_cast<int>(inputs.size()) > op->get_items_expected_max() &&
-            op->get_multi_option_policy() != MultiOptionPolicy::TakeAll &&
-            op->get_multi_option_policy() != MultiOptionPolicy::Join)
+            op->get_multi_option_policy() != multi_option_policy_t::take_all &&
+            op->get_multi_option_policy() != multi_option_policy_t::join)
         {
             if (op->get_items_expected_max() > 1)
             {
-                throw ArgumentMismatch::AtMost(item.fullname(), op->get_items_expected_max(), inputs.size());
+                throw argument_mismatch_t::at_most(item.fullname(), op->get_items_expected_max(), inputs.size());
             }
 
             if (!op->get_disable_flag_override())
             {
-                throw ConversionError::TooManyInputsFlag(item.fullname());
+                throw conversion_error_t::too_many_inputs_flag(item.fullname());
             }
-            // if the disable flag override is set then we must have the flag values match a known flag value
-            // this is true regardless of the output value, so an array input is possible and must be accounted for
+
+            // With flag overrides disabled every value must be one the flag recognises,
+            // whatever the resulting output, so an array of them is still acceptable.
             for (const auto &res : inputs)
             {
                 bool valid_value {false};
@@ -3842,14 +4726,8 @@ export namespace CLI
                 }
                 else
                 {
-                    for (const auto &valid_res : op->default_flag_values_)
-                    {
-                        if (valid_res.second == res)
-                        {
-                            valid_value = true;
-                            break;
-                        }
-                    }
+                    valid_value = std::ranges::any_of(op->default_flag_values_,
+                                                      [&res](const auto &valid_res) { return valid_res.second == res; });
                 }
 
                 if (valid_value)
@@ -3858,7 +4736,7 @@ export namespace CLI
                 }
                 else
                 {
-                    throw InvalidError("invalid flag argument given");
+                    throw invalid_error_t("invalid flag argument given");
                 }
             }
             return true;
@@ -3866,15 +4744,15 @@ export namespace CLI
         return false;
     }
 
-    bool App::_parse_single_config(const ConfigItem &item, std::size_t level)
+    auto app_t::_parse_single_config(const config_item_t &item, std::size_t level) -> bool
     {
-
         if (level < item.parents.size())
         {
             auto *subcom = get_subcommand_no_throw(item.parents.at(level));
             return (subcom != nullptr) ? subcom->_parse_single_config(item, level + 1) : false;
         }
-        // check for section open
+
+        // A "++" entry marks a section opening.
         if (item.name == "++")
         {
             if (configurable_)
@@ -3888,25 +4766,30 @@ export namespace CLI
             }
             return true;
         }
-        // check for section close
+
+        // A "--" entry marks a section closing.
         if (item.name == "--")
         {
             if (configurable_ && parse_complete_callback_)
             {
-                _process_callbacks(CallbackPriority::FirstPreHelp);
-                _process_callbacks(CallbackPriority::First);
-                _process_callbacks(CallbackPriority::PreRequirementsCheckPreHelp);
-                _process_callbacks(CallbackPriority::PreRequirementsCheck);
+                // As in _parse, but without the help flags: a configuration file cannot
+                // ask for help.
+                _process_callbacks(callback_priority_t::first_pre_help);
+                _process_callbacks(callback_priority_t::first);
+                _process_callbacks(callback_priority_t::pre_requirements_check_pre_help);
+                _process_callbacks(callback_priority_t::pre_requirements_check);
                 _process_requirements();
-                _process_callbacks(CallbackPriority::NormalPreHelp);
-                _process_callbacks(CallbackPriority::Normal);
-                _process_callbacks(CallbackPriority::LastPreHelp);
-                _process_callbacks(CallbackPriority::Last);
+                _process_callbacks(callback_priority_t::normal_pre_help);
+                _process_callbacks(callback_priority_t::normal);
+                _process_callbacks(callback_priority_t::last_pre_help);
+                _process_callbacks(callback_priority_t::last);
                 run_callback();
             }
             return true;
         }
-        Option *op = get_option_no_throw("--" + item.name);
+
+        // Configuration names carry no dashes, so try each spelling in turn.
+        option_t *op = get_option_no_throw("--" + item.name);
         if (op == nullptr)
         {
             if (item.name.size() == 1)
@@ -3920,6 +4803,8 @@ export namespace CLI
         }
         else if (!op->get_configurable())
         {
+            // The long spelling matched something that cannot be configured; a short
+            // option of the same name might still be usable.
             if (item.name.size() == 1)
             {
                 auto *testop = get_option_no_throw("-" + item.name);
@@ -3929,28 +4814,28 @@ export namespace CLI
                 }
             }
         }
+
         if (op == nullptr || !op->get_configurable())
         {
-            std::string iname = item.name;
-            auto options = get_options([iname](const CLI::Option *opt) {
+            const auto options = get_options([&name = item.name](const option_t *opt) {
                 return (opt->get_configurable() &&
-                        (opt->check_name(iname) || opt->check_lname(iname) || opt->check_sname(iname)));
+                        (opt->check_name(name) || opt->check_lname(name) || opt->check_sname(name)));
             });
             if (!options.empty())
             {
                 op = options[0];
             }
         }
+
         if (op == nullptr)
         {
-            // If the option was not present
-            if (get_allow_config_extras() == config_extras_mode::capture)
+            if (get_allow_config_extras() == config_extras_mode_t::capture)
             {
-                // Should we worry about classifying the extras properly?
-                missing_.emplace_back(detail::Classifier::NONE, item.fullname());
+                // Recorded unclassified; a configuration entry has no command-line form.
+                missing_.emplace_back(detail::classifier_t::none, item.fullname());
                 for (const auto &input : item.inputs)
                 {
-                    missing_.emplace_back(detail::Classifier::NONE, input);
+                    missing_.emplace_back(detail::classifier_t::none, input);
                 }
             }
             return false;
@@ -3958,26 +4843,28 @@ export namespace CLI
 
         if (!op->get_configurable())
         {
-            if (get_allow_config_extras() == config_extras_mode::ignore_all)
+            if (get_allow_config_extras() == config_extras_mode_t::ignore_all)
             {
                 return false;
             }
-            throw ConfigError::NotConfigurable(item.fullname());
+            throw config_error_t::not_configurable(item.fullname());
         }
+
         if (op->empty())
         {
-            std::vector<std::string> buffer; // a buffer to use for copying and modifying inputs in a few cases
-            bool useBuffer {false};
+            std::vector<std::string> buffer;
+            bool use_buffer {false};
             if (item.multiline)
             {
+                // The separator only matters to an option that asked for one.
                 if (!op->get_inject_separator())
                 {
                     buffer = item.inputs;
-                    buffer.erase(std::remove(buffer.begin(), buffer.end(), "%%"), buffer.end());
-                    useBuffer = true;
+                    std::erase(buffer, "%%");
+                    use_buffer = true;
                 }
             }
-            const std::vector<std::string> &inputs = (useBuffer) ? buffer : item.inputs;
+            const std::vector<std::string> &inputs = (use_buffer) ? buffer : item.inputs;
             if (op->get_expected_min() == 0)
             {
                 if (_add_flag_like_result(op, item, inputs))
@@ -3992,22 +4879,25 @@ export namespace CLI
         return true;
     }
 
-    bool App::_parse_single(std::vector<std::string> &args, bool &positional_only)
+    auto app_t::_parse_single(std::vector<std::string> &args, bool &positional_only) -> bool
     {
         bool retval = true;
-        detail::Classifier classifier = positional_only ? detail::Classifier::NONE : _recognize(args.back());
+        const detail::classifier_t classifier =
+            positional_only ? detail::classifier_t::none : _recognize(args.back());
+
         switch (classifier)
         {
-        case detail::Classifier::POSITIONAL_MARK:
+        case detail::classifier_t::positional_mark:
             args.pop_back();
             positional_only = true;
             if (get_prefix_command())
             {
-                // don't care about extras mode here
+                // In prefix-command mode everything after the marker is handed straight
+                // back, whatever the extras mode says.
                 missing_.emplace_back(classifier, "--");
                 while (!args.empty())
                 {
-                    missing_.emplace_back(detail::Classifier::NONE, args.back());
+                    missing_.emplace_back(detail::classifier_t::none, args.back());
                     args.pop_back();
                 }
             }
@@ -4020,44 +4910,49 @@ export namespace CLI
                 _move_to_missing(classifier, "--");
             }
             break;
-        case detail::Classifier::SUBCOMMAND_TERMINATOR:
-            // treat this like a positional mark if in the parent app
+
+        case detail::classifier_t::subcommand_terminator:
+            // Behaves like a positional marker, but in the parent application.
             args.pop_back();
             retval = false;
             break;
-        case detail::Classifier::SUBCOMMAND:
+
+        case detail::classifier_t::subcommand:
             retval = _parse_subcommand(args);
             break;
-        case detail::Classifier::LONG:
-        case detail::Classifier::SHORT:
-        case detail::Classifier::WINDOWS_STYLE:
-            // If already parsed a subcommand, don't accept options_
+
+        case detail::classifier_t::long_:
+        case detail::classifier_t::short_:
+        case detail::classifier_t::windows_style:
             retval = _parse_arg(args, classifier, false);
             break;
-        case detail::Classifier::NONE:
-            // Probably a positional or something for a parent (sub)command
+
+        case detail::classifier_t::none:
+            // A positional, or something belonging to a parent command.
             retval = _parse_positional(args, false);
             if (retval && positionals_at_end_)
             {
                 positional_only = true;
             }
             break;
+
             // LCOV_EXCL_START
         default:
-            throw HorribleError("unrecognized classifier (you should not see this!)");
+            throw horrible_error_t("unrecognized classifier (you should not see this!)");
             // LCOV_EXCL_STOP
         }
         return retval;
     }
 
-    [[nodiscard]] std::size_t App::_count_remaining_positionals(bool required_only) const
+    auto app_t::_count_remaining_positionals(bool required_only) const -> std::size_t
     {
         std::size_t retval = 0;
-        for (const Option_p &opt : options_)
+        for (const option_ptr_t &opt : options_)
         {
             if (opt->get_positional() && (!required_only || opt->get_required()))
             {
-                if (opt->get_items_expected_min() > 0 && static_cast<int>(opt->count()) < opt->get_items_expected_min())
+                if (opt->get_items_expected_min() > 0 &&
+                    static_cast<int>(opt->count()) < opt->get_items_expected_min())
                 {
                     retval += static_cast<std::size_t>(opt->get_items_expected_min()) - opt->count();
                 }
@@ -4066,117 +4961,114 @@ export namespace CLI
         return retval;
     }
 
-    [[nodiscard]] bool App::_has_remaining_positionals() const
+    auto app_t::_has_remaining_positionals() const -> bool
     {
-        for (const Option_p &opt : options_)
-        {
-            if (opt->get_positional() && ((static_cast<int>(opt->count()) < opt->get_items_expected_min())))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return std::ranges::any_of(options_, [](const option_ptr_t &opt) {
+            return opt->get_positional() && (static_cast<int>(opt->count()) < opt->get_items_expected_min());
+        });
     }
 
-    bool App::_parse_positional(std::vector<std::string> &args, bool haltOnSubcommand)
+    auto app_t::_parse_positional(std::vector<std::string> &args, bool halt_on_subcommand) -> bool
     {
-
         const std::string &positional = args.back();
-        Option *posOpt {nullptr};
+        option_t *pos_opt {nullptr};
+
+        // With validate_positionals_ set, an option that would reject this value is
+        // passed over so that a later positional can take it.
+        const auto rejects_positional = [this, &positional](const option_ptr_t &opt) {
+            if (!validate_positionals_)
+            {
+                return false;
+            }
+            std::string pos = positional;
+            return !opt->_validate(pos, 0).empty();
+        };
 
         if (positionals_at_end_)
         {
-            // deal with the case of required arguments at the end which should take precedence over other arguments
-            auto arg_rem = args.size();
-            auto remreq = _count_remaining_positionals(true);
+            // Once only as many arguments remain as there are required positionals, the
+            // required ones take precedence over anything optional.
+            const auto arg_rem = args.size();
+            const auto remreq = _count_remaining_positionals(true);
             if (arg_rem <= remreq)
             {
-                for (const Option_p &opt : options_)
+                for (const option_ptr_t &opt : options_)
                 {
                     if (opt->get_positional() && opt->required_)
                     {
                         if (static_cast<int>(opt->count()) < opt->get_items_expected_min())
                         {
-                            if (validate_positionals_)
+                            if (rejects_positional(opt))
                             {
-                                std::string pos = positional;
-                                pos = opt->_validate(pos, 0);
-                                if (!pos.empty())
-                                {
-                                    continue;
-                                }
+                                continue;
                             }
-                            posOpt = opt.get();
+                            pos_opt = opt.get();
                             break;
                         }
                     }
                 }
             }
         }
-        if (posOpt == nullptr)
+
+        if (pos_opt == nullptr)
         {
-            for (const Option_p &opt : options_)
+            // Fill the positionals in declaration order, one at a time.
+            for (const option_ptr_t &opt : options_)
             {
-                // Eat options, one by one, until done
                 if (opt->get_positional() &&
                     (static_cast<int>(opt->count()) < opt->get_items_expected_max() || opt->get_allow_extra_args()))
                 {
-                    if (validate_positionals_)
+                    if (rejects_positional(opt))
                     {
-                        std::string pos = positional;
-                        pos = opt->_validate(pos, 0);
-                        if (!pos.empty())
-                        {
-                            continue;
-                        }
+                        continue;
                     }
-                    posOpt = opt.get();
+                    pos_opt = opt.get();
                     break;
                 }
             }
         }
-        if (posOpt != nullptr)
+
+        if (pos_opt != nullptr)
         {
-            parse_order_.push_back(posOpt);
-            if (posOpt->get_inject_separator())
+            parse_order_.push_back(pos_opt);
+            if (pos_opt->get_inject_separator())
             {
-                if (!posOpt->results().empty() && !posOpt->results().back().empty())
+                if (!pos_opt->results().empty() && !pos_opt->results().back().empty())
                 {
-                    posOpt->add_result(std::string {});
+                    pos_opt->add_result(std::string {});
                 }
             }
+
             results_t prev;
-            if (posOpt->get_trigger_on_parse() && posOpt->current_option_state_ == Option::option_state::callback_run)
+            if (pos_opt->get_trigger_on_parse() &&
+                pos_opt->current_option_state_ == option_t::option_state_t::callback_run)
             {
-                prev = posOpt->results();
-                posOpt->clear();
+                prev = pos_opt->results();
+                pos_opt->clear();
             }
-            if (posOpt->get_expected_min() == 0)
+
+            if (pos_opt->get_expected_min() == 0)
             {
-                ConfigItem item;
-                item.name = posOpt->pname_;
+                config_item_t item;
+                item.name = pos_opt->pname_;
                 item.inputs.push_back(positional);
-                // input is singular guaranteed to return true in that case
-                _add_flag_like_result(posOpt, item, item.inputs);
+                // A single input always succeeds, so the result is not checked.
+                _add_flag_like_result(pos_opt, item, item.inputs);
             }
             else
             {
-                posOpt->add_result(positional);
+                pos_opt->add_result(positional);
             }
 
-            if (posOpt->get_trigger_on_parse())
+            if (pos_opt->get_trigger_on_parse())
             {
-                if (!posOpt->empty())
+                if (!pos_opt->empty())
                 {
-                    posOpt->run_callback();
+                    pos_opt->run_callback();
                 }
-                else
+                else if (!prev.empty())
                 {
-                    if (!prev.empty())
-                    {
-                        posOpt->add_result(prev);
-                    }
+                    pos_opt->add_result(prev);
                 }
             }
 
@@ -4198,16 +5090,17 @@ export namespace CLI
                 }
             }
         }
-        // let the parent deal with it if possible
+
         if (parent_ != nullptr && fallthrough_)
         {
             return _get_fallthrough_parent()->_parse_positional(args, static_cast<bool>(parse_complete_callback_));
         }
-        /// Try to find a local subcommand that is repeated
+
+        // A subcommand may be repeated, so check for one locally before giving up.
         auto *com = _find_subcommand(args.back(), true, false);
         if (com != nullptr && (require_subcommand_max_ == 0 || require_subcommand_max_ > parsed_subcommands_.size()))
         {
-            if (haltOnSubcommand)
+            if (halt_on_subcommand)
             {
                 return false;
             }
@@ -4215,10 +5108,11 @@ export namespace CLI
             com->_parse(args);
             return true;
         }
+
         if (subcommand_fallthrough_)
         {
-            /// now try one last gasp at subcommands that have been executed before, go to root app and try to find a
-            /// subcommand in a broader way, if one exists let the parent deal with it
+            // Last chance: search from the root for a subcommand that ran earlier, and
+            // if one exists let the parent take the argument.
             auto *parent_app = (parent_ != nullptr) ? _get_fallthrough_parent() : this;
             com = parent_app->_find_subcommand(args.back(), true, false);
             if (com != nullptr && (com->parent_->require_subcommand_max_ == 0 ||
@@ -4227,26 +5121,26 @@ export namespace CLI
                 return false;
             }
         }
+
         if (positionals_at_end_)
         {
-            std::vector<std::string> rargs;
-            rargs.resize(args.size());
-            std::reverse_copy(args.begin(), args.end(), rargs.begin());
-            throw CLI::ExtrasError(name_, rargs);
+            const std::vector<std::string> rargs(args.rbegin(), args.rend());
+            throw extras_error_t(name_, rargs);
         }
-        /// If this is an option group don't deal with it
+
+        // An option group leaves the decision to its parent.
         if (parent_ != nullptr && name_.empty())
         {
             return false;
         }
-        /// We are out of other options this goes to missing
-        _move_to_missing(detail::Classifier::NONE, positional);
+
+        _move_to_missing(detail::classifier_t::none, positional);
         args.pop_back();
         if (get_prefix_command())
         {
             while (!args.empty())
             {
-                missing_.emplace_back(detail::Classifier::NONE, args.back());
+                missing_.emplace_back(detail::classifier_t::none, args.back());
                 args.pop_back();
             }
         }
@@ -4254,22 +5148,25 @@ export namespace CLI
         return true;
     }
 
-    [[nodiscard]] App *App::_find_subcommand(const std::string &subc_name,
-                                             bool ignore_disabled,
-                                             bool ignore_used) const noexcept
+    auto app_t::_find_subcommand(const std::string &subc_name, bool ignore_disabled,
+                                 bool ignore_used) const noexcept -> app_t *
     {
-        App *bcom {nullptr};
-        for (const App_p &com : subcommands_)
+        app_t *bcom {nullptr};
+        for (const app_ptr_t &com : subcommands_)
         {
             if (com->disabled_ && ignore_disabled)
+            {
                 continue;
+            }
             if (com->get_name().empty())
             {
+                // Descend into option groups, which hold subcommands but have no name.
                 auto *subc = com->_find_subcommand(subc_name, ignore_disabled, ignore_used);
                 if (subc != nullptr)
                 {
                     if (bcom != nullptr)
                     {
+                        // Two prefix matches is an ambiguity, so neither is returned.
                         return nullptr;
                     }
                     bcom = subc;
@@ -4279,12 +5176,15 @@ export namespace CLI
                     }
                 }
             }
-            auto res = com->check_name_detail(subc_name);
-            if (res != NameMatch::none)
+
+            const auto res = com->check_name_detail(subc_name);
+            if (res != app_t::name_match_t::none)
             {
                 if ((!*com) || !ignore_used)
                 {
-                    if (res == NameMatch::exact)
+                    // An exact match wins immediately; a prefix match has to wait, in
+                    // case a second one turns up and makes it ambiguous.
+                    if (res == app_t::name_match_t::exact)
                     {
                         return com.get();
                     }
@@ -4303,18 +5203,20 @@ export namespace CLI
         return bcom;
     }
 
-    bool App::_parse_subcommand(std::vector<std::string> &args)
+    auto app_t::_parse_subcommand(std::vector<std::string> &args) -> bool
     {
-        if (_count_remaining_positionals(/* required */ true) > 0)
+        if (_count_remaining_positionals(true) > 0)
         {
             _parse_positional(args, false);
             return true;
         }
+
         auto *com = _find_subcommand(args.back(), true, true);
         if (com == nullptr)
         {
-            // the main way to get here is using .notation
-            auto dotloc = args.back().find_first_of('.');
+            // Reached mainly through dotted notation, where `sub.opt` addresses a
+            // subcommand's option directly.
+            const auto dotloc = args.back().find_first_of('.');
             if (dotloc != std::string::npos)
             {
                 com = _find_subcommand(args.back().substr(0, dotloc), true, true);
@@ -4325,6 +5227,7 @@ export namespace CLI
                 }
             }
         }
+
         if (com != nullptr)
         {
             args.pop_back();
@@ -4333,6 +5236,8 @@ export namespace CLI
                 parsed_subcommands_.push_back(com);
             }
             com->_parse(args);
+
+            // Record the subcommand on every application between it and this one.
             auto *parent_app = com->parent_;
             while (parent_app != this)
             {
@@ -4347,13 +5252,15 @@ export namespace CLI
         }
 
         if (parent_ == nullptr)
-            throw HorribleError("Subcommand " + args.back() + " missing");
+        {
+            throw horrible_error_t("Subcommand " + args.back() + " missing");
+        }
         return false;
     }
 
-    bool App::_parse_arg(std::vector<std::string> &args, detail::Classifier current_type, bool local_processing_only)
+    auto app_t::_parse_arg(std::vector<std::string> &args, detail::classifier_t current_type,
+                           bool local_processing_only) -> bool
     {
-
         std::string current = args.back();
 
         std::string arg_name;
@@ -4362,40 +5269,67 @@ export namespace CLI
 
         switch (current_type)
         {
-        case detail::Classifier::LONG:
-            if (!detail::split_long(current, arg_name, value))
-                throw HorribleError("Long parsed but missing (you should not see this):" + args.back());
-            break;
-        case detail::Classifier::SHORT:
-            if (!detail::split_short(current, arg_name, rest))
-                throw HorribleError("Short parsed but missing! You should not see this");
-            break;
-        case detail::Classifier::WINDOWS_STYLE:
-            if (!detail::split_windows_style(current, arg_name, value))
-                throw HorribleError("windows option parsed but missing! You should not see this");
-            break;
-        case detail::Classifier::SUBCOMMAND:
-        case detail::Classifier::SUBCOMMAND_TERMINATOR:
-        case detail::Classifier::POSITIONAL_MARK:
-        case detail::Classifier::NONE:
+        case detail::classifier_t::long_:
+        {
+            const auto res = detail::split_long(current);
+            if (!res)
+            {
+                throw horrible_error_t("Long parsed but missing (you should not see this):" + args.back());
+            }
+            arg_name = res->name;
+            value = res->value;
+        }
+        break;
+
+        case detail::classifier_t::short_:
+        {
+            const auto res = detail::split_short(current);
+            if (!res)
+            {
+                throw horrible_error_t("Short parsed but missing! You should not see this");
+            }
+            arg_name = res->name;
+            rest = res->value;
+        }
+        break;
+
+        case detail::classifier_t::windows_style:
+        {
+            const auto res = detail::split_windows_style(current);
+            if (!res)
+            {
+                throw horrible_error_t("windows option parsed but missing! You should not see this");
+            }
+            arg_name = res->name;
+            value = res->value;
+        }
+        break;
+
+        case detail::classifier_t::subcommand:
+        case detail::classifier_t::subcommand_terminator:
+        case detail::classifier_t::positional_mark:
+        case detail::classifier_t::none:
         default:
-            throw HorribleError("parsing got called with invalid option! You should not see this");
+            throw horrible_error_t("parsing got called with invalid option! You should not see this");
         }
 
-        auto op_ptr =
-            std::find_if(std::begin(options_), std::end(options_), [arg_name, current_type](const Option_p &opt) {
-                if (current_type == detail::Classifier::LONG)
-                    return opt->check_lname(arg_name);
-                if (current_type == detail::Classifier::SHORT)
-                    return opt->check_sname(arg_name);
-                // this will only get called for detail::Classifier::WINDOWS_STYLE
-                return opt->check_lname(arg_name) || opt->check_sname(arg_name);
-            });
+        auto op_ptr = std::ranges::find_if(options_, [&arg_name, current_type](const option_ptr_t &opt) {
+            if (current_type == detail::classifier_t::long_)
+            {
+                return opt->check_lname(arg_name);
+            }
+            if (current_type == detail::classifier_t::short_)
+            {
+                return opt->check_sname(arg_name);
+            }
+            // Only reached for detail::classifier_t::windows_style, which accepts either form.
+            return opt->check_lname(arg_name) || opt->check_sname(arg_name);
+        });
 
-        // Option not found
+        // A `while` rather than an `if` purely so that the body can `break` out to the
+        // code below once a match is finally found.
         while (op_ptr == std::end(options_))
         {
-            // using while so we can break
             for (auto &subc : subcommands_)
             {
                 if (subc->name_.empty() && !subc->disabled_)
@@ -4410,14 +5344,18 @@ export namespace CLI
                     }
                 }
             }
-            if (allow_non_standard_options_ && current_type == detail::Classifier::SHORT && current.size() > 2)
+
+            if (allow_non_standard_options_ && current_type == detail::classifier_t::short_ && current.size() > 2)
             {
-                std::string narg_name;
-                std::string nvalue;
-                detail::split_long(std::string {'-'} + current, narg_name, nvalue);
-                op_ptr = std::find_if(std::begin(options_), std::end(options_), [narg_name](const Option_p &opt) {
-                    return opt->check_sname(narg_name);
-                });
+                // Retry `-abc` as though it were `--abc`, which is how a non-standard
+                // multi-character short name is spelled. A failure leaves both parts
+                // empty, matching the original, which discarded the return value here.
+                const auto nres = detail::split_long(std::string {'-'} + current);
+                const std::string narg_name = nres ? nres->name : std::string {};
+                const std::string nvalue = nres ? nres->value : std::string {};
+
+                op_ptr = std::ranges::find_if(
+                    options_, [&narg_name](const option_ptr_t &opt) { return opt->check_sname(narg_name); });
                 if (op_ptr != std::end(options_))
                 {
                     arg_name = narg_name;
@@ -4427,17 +5365,18 @@ export namespace CLI
                 }
             }
 
-            // don't capture missing if this is a nameless subcommand and nameless subcommands can't fallthrough
+            // A nameless subcommand cannot fall through, so it must not swallow the
+            // argument into its own missing list.
             if (parent_ != nullptr && name_.empty())
             {
                 return false;
             }
 
-            // now check for '.' notation of subcommands
-            auto dotloc = arg_name.find_first_of('.', 1);
+            // Dotted notation, `--sub.opt=value`, is equivalent to naming the
+            // subcommand and then the option.
+            const auto dotloc = arg_name.find_first_of('.', 1);
             if (dotloc != std::string::npos && dotloc < arg_name.size() - 1)
             {
-                // using dot notation is equivalent to single argument subcommand
                 auto *sub = _find_subcommand(arg_name.substr(0, dotloc), true, false);
                 if (sub != nullptr)
                 {
@@ -4447,7 +5386,7 @@ export namespace CLI
                     if (arg_name.size() > 1)
                     {
                         args.push_back(std::string("--") + v.substr(dotloc + 3));
-                        current_type = detail::Classifier::LONG;
+                        current_type = detail::classifier_t::long_;
                     }
                     else
                     {
@@ -4455,17 +5394,19 @@ export namespace CLI
                         nval.front() = '-';
                         if (nval.size() > 2)
                         {
-                            // '=' not allowed in short form arguments
+                            // A short option cannot carry '=', so the value becomes a
+                            // separate argument.
                             args.push_back(nval.substr(3));
                             nval.resize(2);
                         }
                         args.push_back(nval);
-                        current_type = detail::Classifier::SHORT;
+                        current_type = detail::classifier_t::short_;
                     }
-                    std::string dummy1, dummy2;
+
                     bool val = false;
-                    if ((current_type == detail::Classifier::SHORT && detail::valid_first_char(args.back()[1])) ||
-                        detail::split_long(args.back(), dummy1, dummy2))
+                    if ((current_type == detail::classifier_t::short_ &&
+                         detail::valid_first_char(args.back()[1])) ||
+                        detail::split_long(args.back()).has_value())
                     {
                         val = sub->_parse_arg(args, current_type, true);
                     }
@@ -4476,26 +5417,27 @@ export namespace CLI
                         {
                             parsed_subcommands_.push_back(sub);
                         }
-                        // deal with preparsing
                         increment_parsed();
                         _trigger_pre_parse(args.size());
-                        // run the parse complete callback since the subcommand processing is now complete
+
+                        // The subcommand is complete after a single dotted option, so
+                        // run its completion sequence now.
                         if (sub->parse_complete_callback_)
                         {
-                            sub->_process_callbacks(CallbackPriority::FirstPreHelp);
-                            sub->_process_help_flags(CallbackPriority::First);
-                            sub->_process_callbacks(CallbackPriority::First);
+                            sub->_process_callbacks(callback_priority_t::first_pre_help);
+                            sub->_process_help_flags(callback_priority_t::first);
+                            sub->_process_callbacks(callback_priority_t::first);
                             sub->_process_env();
-                            sub->_process_callbacks(CallbackPriority::PreRequirementsCheckPreHelp);
-                            sub->_process_help_flags(CallbackPriority::PreRequirementsCheck);
-                            sub->_process_callbacks(CallbackPriority::PreRequirementsCheck);
+                            sub->_process_callbacks(callback_priority_t::pre_requirements_check_pre_help);
+                            sub->_process_help_flags(callback_priority_t::pre_requirements_check);
+                            sub->_process_callbacks(callback_priority_t::pre_requirements_check);
                             sub->_process_requirements();
-                            sub->_process_callbacks(CallbackPriority::NormalPreHelp);
-                            sub->_process_help_flags(CallbackPriority::Normal);
-                            sub->_process_callbacks(CallbackPriority::Normal);
-                            sub->_process_callbacks(CallbackPriority::LastPreHelp);
-                            sub->_process_help_flags(CallbackPriority::Last);
-                            sub->_process_callbacks(CallbackPriority::Last);
+                            sub->_process_callbacks(callback_priority_t::normal_pre_help);
+                            sub->_process_help_flags(callback_priority_t::normal);
+                            sub->_process_callbacks(callback_priority_t::normal);
+                            sub->_process_callbacks(callback_priority_t::last_pre_help);
+                            sub->_process_help_flags(callback_priority_t::last);
+                            sub->_process_callbacks(callback_priority_t::last);
                             sub->run_callback(false, true);
                         }
                         return true;
@@ -4504,38 +5446,40 @@ export namespace CLI
                     args.push_back(v);
                 }
             }
+
             if (local_processing_only)
             {
                 return false;
             }
-            // If a subcommand, try the main command
-            if (parent_ != nullptr && fallthrough_)
-                return _get_fallthrough_parent()->_parse_arg(args, current_type, false);
 
-            // Otherwise, add to missing
+            if (parent_ != nullptr && fallthrough_)
+            {
+                return _get_fallthrough_parent()->_parse_arg(args, current_type, false);
+            }
+
             args.pop_back();
             _move_to_missing(current_type, current);
-            if (get_prefix_command_mode() == PrefixCommandMode::On)
+            if (get_prefix_command_mode() == prefix_command_mode_t::on)
             {
                 while (!args.empty())
                 {
-                    missing_.emplace_back(detail::Classifier::NONE, args.back());
+                    missing_.emplace_back(detail::classifier_t::none, args.back());
                     args.pop_back();
                 }
             }
-            else if (allow_extras_ == ExtrasMode::AssumeSingleArgument)
+            else if (allow_extras_ == extras_mode_t::assume_single_argument)
             {
-                if (!args.empty() && _recognize(args.back(), false) == detail::Classifier::NONE)
+                if (!args.empty() && _recognize(args.back(), false) == detail::classifier_t::none)
                 {
-                    _move_to_missing(detail::Classifier::NONE, args.back());
+                    _move_to_missing(detail::classifier_t::none, args.back());
                     args.pop_back();
                 }
             }
-            else if (allow_extras_ == ExtrasMode::AssumeMultipleArguments)
+            else if (allow_extras_ == extras_mode_t::assume_multiple_arguments)
             {
-                while (!args.empty() && _recognize(args.back(), false) == detail::Classifier::NONE)
+                while (!args.empty() && _recognize(args.back(), false) == detail::classifier_t::none)
                 {
-                    _move_to_missing(detail::Classifier::NONE, args.back());
+                    _move_to_missing(detail::classifier_t::none, args.back());
                     args.pop_back();
                 }
             }
@@ -4544,9 +5488,10 @@ export namespace CLI
 
         args.pop_back();
 
-        // Get a reference to the pointer to make syntax bearable
-        Option_p &op = *op_ptr;
-        /// if we require a separator add it here
+        // A reference, so that the rest of the function is not shot through with
+        // dereferences of the iterator.
+        option_ptr_t &op = *op_ptr;
+
         if (op->get_inject_separator())
         {
             if (!op->results().empty() && !op->results().back().empty())
@@ -4554,77 +5499,80 @@ export namespace CLI
                 op->add_result(std::string {});
             }
         }
-        if (op->get_trigger_on_parse() && op->current_option_state_ == Option::option_state::callback_run)
+        if (op->get_trigger_on_parse() && op->current_option_state_ == option_t::option_state_t::callback_run)
         {
             op->clear();
         }
-        int min_num = (std::min)(op->get_type_size_min(), op->get_items_expected_min());
+
+        const int min_num = (std::min)(op->get_type_size_min(), op->get_items_expected_min());
         int max_num = op->get_items_expected_max();
-        // check container like options to limit the argument size to a single type if the allow_extra_flags argument is
-        // set. 16 is somewhat arbitrary (needs to be at least 4)
+
+        // A container-like option with extra arguments disabled takes only one element's
+        // worth per appearance. The 1/16 threshold is arbitrary; it just has to be
+        // comfortably below the unbounded sentinel.
         if (max_num >= detail::expected_max_vector_size / 16 && !op->get_allow_extra_args())
         {
             auto tmax = op->get_type_size_max();
-            max_num = detail::checked_multiply(tmax, op->get_expected_min()) ? tmax : detail::expected_max_vector_size;
+            max_num = detail::checked_multiply(tmax, op->get_expected_min()) ? tmax
+                                                                            : detail::expected_max_vector_size;
         }
-        // Make sure we always eat the minimum for unlimited vectors
-        int collected = 0;    // total number of arguments collected
-        int result_count = 0; // local variable for number of results in a single arg string
-        // deal with purely flag like things
+
+        int collected = 0;    // values gathered for this option overall
+        int result_count = 0; // values produced by the most recent add_result
+
         if (max_num == 0)
         {
+            // A pure flag: the value comes from the flag's own table, not the command line.
             auto res = op->get_flag_value(arg_name, value);
-            op->add_result(res);
+            op->add_result(std::move(res));
             parse_order_.push_back(op.get());
         }
         else if (!value.empty())
-        { // --this=value
+        {
+            // --name=value
             op->add_result(value, result_count);
             parse_order_.push_back(op.get());
             collected += result_count;
-            // -Trest
         }
         else if (!rest.empty())
         {
+            // -Nvalue
             op->add_result(rest, result_count);
             parse_order_.push_back(op.get());
-            rest = "";
+            rest.clear();
             collected += result_count;
         }
 
-        // gather the minimum number of arguments
+        // Take the minimum unconditionally, even for an unbounded option.
         while (min_num > collected && !args.empty())
         {
-            std::string current_ = args.back();
+            std::string next_arg = args.back();
             args.pop_back();
-            op->add_result(current_, result_count);
+            op->add_result(next_arg, result_count);
             parse_order_.push_back(op.get());
             collected += result_count;
         }
 
         if (min_num > collected)
-        { // if we have run out of arguments and the minimum was not met
-            throw ArgumentMismatch::TypedAtLeast(op->get_name(), min_num, op->get_type_name());
+        {
+            throw argument_mismatch_t::typed_at_least(op->get_name(), min_num, op->get_type_name());
         }
 
-        // now check for optional arguments
         if (max_num > collected || op->get_allow_extra_args())
-        { // we allow optional arguments
-            auto remreqpos = _count_remaining_positionals(true);
-            // we have met the minimum now optionally check up to the maximum
+        {
+            const auto remreqpos = _count_remaining_positionals(true);
             while ((collected < max_num || op->get_allow_extra_args()) && !args.empty() &&
-                   _recognize(args.back(), false) == detail::Classifier::NONE)
+                   _recognize(args.back(), false) == detail::classifier_t::none)
             {
-                // If any required positionals remain, don't keep eating
+                // Leave enough arguments behind to satisfy the required positionals.
                 if (remreqpos >= args.size())
                 {
                     break;
                 }
                 if (validate_optional_arguments_)
                 {
-                    std::string arg = args.back();
-                    arg = op->_validate(arg, 0);
-                    if (!arg.empty())
+                    std::string candidate = args.back();
+                    if (!op->_validate(candidate, 0).empty())
                     {
                         break;
                     }
@@ -4635,18 +5583,23 @@ export namespace CLI
                 collected += result_count;
             }
 
-            // Allow -- to end an unlimited list and "eat" it
-            if (!args.empty() && _recognize(args.back()) == detail::Classifier::POSITIONAL_MARK)
+            // A trailing `--` closes an unbounded list, and is consumed doing so.
+            if (!args.empty() && _recognize(args.back()) == detail::classifier_t::positional_mark)
+            {
                 args.pop_back();
-            // optional flag that didn't receive anything now get the default value
+            }
+
+            // An optional flag that received nothing falls back to its default.
             if (min_num == 0 && max_num > 0 && collected == 0)
             {
                 auto res = op->get_flag_value(arg_name, std::string {});
-                op->add_result(res);
+                op->add_result(std::move(res));
                 parse_order_.push_back(op.get());
             }
         }
-        // if we only partially completed a type then add an empty string if allowed for later processing
+
+        // A partially filled compound type gets an empty placeholder when the type
+        // permits a variable size, and is an error when it does not.
         if (min_num > 0 && (collected % op->get_type_size_max()) != 0)
         {
             if (op->get_type_size_max() != op->get_type_size_min())
@@ -4655,22 +5608,26 @@ export namespace CLI
             }
             else
             {
-                throw ArgumentMismatch::PartialType(op->get_name(), op->get_type_size_min(), op->get_type_name());
+                throw argument_mismatch_t::partial_type(op->get_name(), op->get_type_size_min(),
+                                                        op->get_type_name());
             }
         }
+
         if (op->get_trigger_on_parse())
         {
             op->run_callback();
         }
+
+        // Whatever is left of a bundled short argument goes back for another pass.
         if (!rest.empty())
         {
             rest = "-" + rest;
-            args.push_back(rest);
+            args.push_back(std::move(rest));
         }
         return true;
     }
 
-    void App::_trigger_pre_parse(std::size_t remaining_args)
+    auto app_t::_trigger_pre_parse(std::size_t remaining_args) -> void
     {
         if (!pre_parse_called_)
         {
@@ -4684,7 +5641,9 @@ export namespace CLI
         {
             if (!name_.empty())
             {
-                auto pcnt = parsed_;
+                // A named subcommand with an immediate callback starts fresh on each
+                // appearance, but keeps its parse count and its unmatched arguments.
+                const auto pcnt = parsed_;
                 missing_t extras = std::move(missing_);
                 clear();
                 parsed_ = pcnt;
@@ -4694,7 +5653,7 @@ export namespace CLI
         }
     }
 
-    App *App::_get_fallthrough_parent() noexcept
+    auto app_t::_get_fallthrough_parent() noexcept -> app_t *
     {
         if (parent_ == nullptr)
         {
@@ -4708,7 +5667,7 @@ export namespace CLI
         return fallthrough_parent;
     }
 
-    const App *App::_get_fallthrough_parent() const noexcept
+    auto app_t::_get_fallthrough_parent() const noexcept -> const app_t *
     {
         if (parent_ == nullptr)
         {
@@ -4722,93 +5681,104 @@ export namespace CLI
         return fallthrough_parent;
     }
 
-    [[nodiscard]] const std::string &App::_compare_subcommand_names(const App &subcom, const App &base) const
+    auto app_t::_compare_subcommand_names(const app_t &subcom, const app_t &base) const -> const std::string &
     {
-        static const std::string estring;
+        static const std::string empty_name;
         if (subcom.disabled_)
         {
-            return estring;
+            return empty_name;
         }
+
         for (const auto &subc : base.subcommands_)
         {
-            if (subc.get() != &subcom)
+            if (subc.get() == &subcom)
             {
-                if (subc->disabled_)
+                continue;
+            }
+            if (subc->disabled_)
+            {
+                continue;
+            }
+
+            if (!subcom.get_name().empty())
+            {
+                if (subc->check_name(subcom.get_name()))
                 {
-                    continue;
+                    return subcom.get_name();
                 }
-                if (!subcom.get_name().empty())
+            }
+            if (!subc->get_name().empty())
+            {
+                if (subcom.check_name(subc->get_name()))
                 {
-                    if (subc->check_name(subcom.get_name()))
-                    {
-                        return subcom.get_name();
-                    }
+                    return subc->get_name();
                 }
-                if (!subc->get_name().empty())
+            }
+            for (const auto &les : subcom.aliases_)
+            {
+                if (subc->check_name(les))
                 {
-                    if (subcom.check_name(subc->get_name()))
-                    {
-                        return subc->get_name();
-                    }
+                    return les;
                 }
-                for (const auto &les : subcom.aliases_)
+            }
+            // Both directions are needed: ignore_case or ignore_underscore may be set
+            // on one of the two and not the other.
+            for (const auto &les : subc->aliases_)
+            {
+                if (subcom.check_name(les))
                 {
-                    if (subc->check_name(les))
-                    {
-                        return les;
-                    }
+                    return les;
                 }
-                // this loop is needed in case of ignore_underscore or ignore_case on one but not the other
-                for (const auto &les : subc->aliases_)
+            }
+
+            // An option group holds subcommands of its own, so recurse into it.
+            if (subc->get_name().empty())
+            {
+                const auto &cmpres = _compare_subcommand_names(subcom, *subc);
+                if (!cmpres.empty())
                 {
-                    if (subcom.check_name(les))
-                    {
-                        return les;
-                    }
+                    return cmpres;
                 }
-                // if the subcommand is an option group we need to check deeper
-                if (subc->get_name().empty())
+            }
+            if (subcom.get_name().empty())
+            {
+                const auto &cmpres = _compare_subcommand_names(*subc, subcom);
+                if (!cmpres.empty())
                 {
-                    const auto &cmpres = _compare_subcommand_names(subcom, *subc);
-                    if (!cmpres.empty())
-                    {
-                        return cmpres;
-                    }
-                }
-                // if the test subcommand is an option group we need to check deeper
-                if (subcom.get_name().empty())
-                {
-                    const auto &cmpres = _compare_subcommand_names(*subc, subcom);
-                    if (!cmpres.empty())
-                    {
-                        return cmpres;
-                    }
+                    return cmpres;
                 }
             }
         }
-        return estring;
+        return empty_name;
     }
 
-    bool capture_extras(ExtrasMode mode)
+    /// @brief Reports whether an extras mode keeps unmatched arguments.
+    ///
+    /// @param mode The mode to test.
+    /// @return `true` if unmatched arguments are retained rather than reported.
+    auto capture_extras(extras_mode_t mode) -> bool
     {
-        return mode == ExtrasMode::Capture || mode == ExtrasMode::AssumeSingleArgument ||
-               mode == ExtrasMode::AssumeMultipleArguments;
+        return mode == extras_mode_t::capture || mode == extras_mode_t::assume_single_argument ||
+               mode == extras_mode_t::assume_multiple_arguments;
     }
-    void App::_move_to_missing(detail::Classifier val_type, const std::string &val)
+
+    auto app_t::_move_to_missing(detail::classifier_t val_type, const std::string &val) -> void
     {
-        if (allow_extras_ == ExtrasMode::ErrorImmediately)
+        if (allow_extras_ == extras_mode_t::error_immediately)
         {
-            throw ExtrasError(name_, std::vector<std::string> {val});
+            throw extras_error_t(name_, std::vector<std::string> {val});
         }
+
         if (capture_extras(allow_extras_) || subcommands_.empty() || get_prefix_command())
         {
-            if (allow_extras_ != ExtrasMode::Ignore)
+            if (allow_extras_ != extras_mode_t::ignore)
             {
                 missing_.emplace_back(val_type, val);
             }
             return;
         }
-        // allow extra arguments to be placed in an option group if it is allowed there
+
+        // An option group willing to capture extras takes them instead.
         for (auto &subc : subcommands_)
         {
             if (subc->name_.empty() && capture_extras(subc->allow_extras_))
@@ -4817,71 +5787,64 @@ export namespace CLI
                 return;
             }
         }
-        if (allow_extras_ != ExtrasMode::Ignore)
+
+        if (allow_extras_ != extras_mode_t::ignore)
         {
-            // if we haven't found any place to put them yet put them in missing
             missing_.emplace_back(val_type, val);
         }
     }
 
-    void App::_move_option(Option *opt, App *app)
+    auto app_t::_move_option(option_t *opt, app_t *app) -> void
     {
         if (opt == nullptr)
         {
-            throw OptionNotFound("the option is NULL");
+            throw option_not_found_t("the option is NULL");
         }
-        // verify that the give app is actually a subcommand
-        bool found = false;
-        for (auto &subc : subcommands_)
-        {
-            if (app == subc.get())
-            {
-                found = true;
-            }
-        }
+
+        const bool found = std::ranges::any_of(subcommands_, [app](const app_ptr_t &subc)
+                                               { return app == subc.get(); });
         if (!found)
         {
-            throw OptionNotFound("The Given app is not a subcommand");
+            throw option_not_found_t("The Given app is not a subcommand");
         }
 
         if ((help_ptr_ == opt) || (help_all_ptr_ == opt))
-            throw OptionAlreadyAdded("cannot move help options");
-
+        {
+            throw option_already_added_t("cannot move help options");
+        }
         if (config_ptr_ == opt)
-            throw OptionAlreadyAdded("cannot move config file options");
+        {
+            throw option_already_added_t("cannot move config file options");
+        }
 
-        auto iterator =
-            std::find_if(std::begin(options_), std::end(options_), [opt](const Option_p &v) { return v.get() == opt; });
-        if (iterator != std::end(options_))
+        const auto iterator =
+            std::ranges::find_if(options_, [opt](const option_ptr_t &v) { return v.get() == opt; });
+        if (iterator == std::end(options_))
         {
-            const auto &opt_p = *iterator;
-            if (std::find_if(std::begin(app->options_), std::end(app->options_), [&opt_p](const Option_p &v) {
-                    return (*v == *opt_p);
-                }) == std::end(app->options_))
-            {
-                // only erase after the insertion was successful
-                app->options_.push_back(std::move(*iterator));
-                options_.erase(iterator);
-            }
-            else
-            {
-                throw OptionAlreadyAdded("option was not located: " + opt->get_name());
-            }
+            throw option_not_found_t("could not locate the given option");
         }
-        else
+
+        const auto &opt_p = *iterator;
+        const bool conflicts = std::ranges::any_of(app->options_, [&opt_p](const option_ptr_t &v)
+                                                   { return (*v == *opt_p); });
+        if (conflicts)
         {
-            throw OptionNotFound("could not locate the given Option");
+            throw option_already_added_t("option was not located: " + opt->get_name());
         }
+
+        // Erase only once the insertion has succeeded.
+        app->options_.push_back(std::move(*iterator));
+        options_.erase(iterator);
     }
 
-    void TriggerOn(App *trigger_app, App *app_to_enable)
+    auto trigger_on(app_t *trigger_app, app_t *app_to_enable) -> void
     {
         app_to_enable->enabled_by_default(false);
         app_to_enable->disabled_by_default();
         trigger_app->preparse_callback([app_to_enable](std::size_t) { app_to_enable->disabled(false); });
     }
 
-    void TriggerOn(App *trigger_app, std::vector<App *> apps_to_enable)
+    auto trigger_on(app_t *trigger_app, std::vector<app_t *> apps_to_enable) -> void
     {
         for (auto &app : apps_to_enable)
         {
@@ -4889,22 +5852,22 @@ export namespace CLI
             app->disabled_by_default();
         }
 
-        trigger_app->preparse_callback([apps_to_enable](std::size_t) {
-            for (const auto &app : apps_to_enable)
+        trigger_app->preparse_callback([apps = std::move(apps_to_enable)](std::size_t) {
+            for (auto *app : apps)
             {
                 app->disabled(false);
             }
         });
     }
 
-    void TriggerOff(App *trigger_app, App *app_to_enable)
+    auto trigger_off(app_t *trigger_app, app_t *app_to_enable) -> void
     {
         app_to_enable->disabled_by_default(false);
         app_to_enable->enabled_by_default();
         trigger_app->preparse_callback([app_to_enable](std::size_t) { app_to_enable->disabled(); });
     }
 
-    void TriggerOff(App *trigger_app, std::vector<App *> apps_to_enable)
+    auto trigger_off(app_t *trigger_app, std::vector<app_t *> apps_to_enable) -> void
     {
         for (auto &app : apps_to_enable)
         {
@@ -4912,22 +5875,22 @@ export namespace CLI
             app->enabled_by_default();
         }
 
-        trigger_app->preparse_callback([apps_to_enable](std::size_t) {
-            for (const auto &app : apps_to_enable)
+        trigger_app->preparse_callback([apps = std::move(apps_to_enable)](std::size_t) {
+            for (auto *app : apps)
             {
                 app->disabled();
             }
         });
     }
 
-    void deprecate_option(Option *opt, const std::string &replacement)
+    auto deprecate_option(option_t *opt, const std::string &replacement) -> void
     {
-        Validator deprecate_warning {[opt, replacement](std::string &) {
-                                         std::cout << opt->get_name() << " is deprecated please use '" << replacement
-                                                   << "' instead\n";
-                                         return std::string();
-                                     },
-                                     "DEPRECATED"};
+        validator_t deprecate_warning {[opt, replacement](std::string &) {
+                                           std::cout << opt->get_name() << " is deprecated please use '"
+                                                     << replacement << "' instead\n";
+                                           return std::string();
+                                       },
+                                       "DEPRECATED"};
         deprecate_warning.application_index(0);
         opt->check(deprecate_warning);
         if (!replacement.empty())
@@ -4936,9 +5899,11 @@ export namespace CLI
         }
     }
 
-    void retire_option(App *app, Option *opt)
+    auto retire_option(app_t *app, option_t *opt) -> void
     {
-        App temp;
+        // A scratch application is used only to keep a copy of the option's shape while
+        // the original is removed and replaced.
+        app_t temp;
         auto *option_copy = temp.add_option(opt->get_name(false, true))
                                 ->type_size(opt->get_type_size_min(), opt->get_type_size_max())
                                 ->expected(opt->get_expected_min(), opt->get_expected_max())
@@ -4954,80 +5919,85 @@ export namespace CLI
 
         // LCOV_EXCL_START
         // something odd with coverage on new compilers
-        Validator retired_warning {[opt2](std::string &) {
-                                       std::cout << "WARNING " << opt2->get_name() << " is retired and has no effect\n";
-                                       return std::string();
-                                   },
-                                   ""};
+        validator_t retired_warning {[opt2](std::string &) {
+                                         std::cout << "WARNING " << opt2->get_name()
+                                                   << " is retired and has no effect\n";
+                                         return std::string();
+                                     },
+                                     ""};
         // LCOV_EXCL_STOP
         retired_warning.application_index(0);
         opt2->check(retired_warning);
     }
 
-    void retire_option(App &app, Option *opt)
+    auto retire_option(app_t &app, option_t *opt) -> void
     {
         retire_option(&app, opt);
     }
 
-    void retire_option(App *app, const std::string &option_name)
+    auto retire_option(app_t *app, const std::string &option_name) -> void
     {
-
         auto *opt = app->get_option_no_throw(option_name);
         if (opt != nullptr)
         {
             retire_option(app, opt);
             return;
         }
+
         auto *opt2 = app->add_option(option_name, "option has been retired and has no effect")
                          ->type_name("RETIRED")
                          ->expected(0, 1)
                          ->default_str("RETIRED");
         // LCOV_EXCL_START
         // something odd with coverage on new compilers
-        Validator retired_warning {[opt2](std::string &) {
-                                       std::cout << "WARNING " << opt2->get_name() << " is retired and has no effect\n";
-                                       return std::string();
-                                   },
-                                   ""};
+        validator_t retired_warning {[opt2](std::string &) {
+                                         std::cout << "WARNING " << opt2->get_name()
+                                                   << " is retired and has no effect\n";
+                                         return std::string();
+                                     },
+                                     ""};
         // LCOV_EXCL_STOP
         retired_warning.application_index(0);
         opt2->check(retired_warning);
     }
 
-    void retire_option(App &app, const std::string &option_name)
+    auto retire_option(app_t &app, const std::string &option_name) -> void
     {
         retire_option(&app, option_name);
     }
 
-    namespace FailureMessage
+    namespace failure_message
     {
 
-        std::string simple(const App *app, const Error &e)
+        auto simple(const app_t *app, const error_t &e) -> std::string
         {
             std::string header = std::string(e.what()) + "\n";
             std::vector<std::string> names;
 
-            // Collect names
             if (app->get_help_ptr() != nullptr)
+            {
                 names.push_back(app->get_help_ptr()->get_name());
-
+            }
             if (app->get_help_all_ptr() != nullptr)
+            {
                 names.push_back(app->get_help_all_ptr()->get_name());
+            }
 
-            // If any names found, suggest those
             if (!names.empty())
+            {
                 header += "Run with " + detail::join(names, " or ") + " for more information.\n";
+            }
 
             return header;
         }
 
-        std::string help(const App *app, const Error &e)
+        auto help(const app_t *app, const error_t &e) -> std::string
         {
             std::string header = std::string("ERROR: ") + e.get_name() + ": " + e.what() + "\n";
             header += app->help();
             return header;
         }
 
-    } // namespace FailureMessage
+    } // namespace failure_message
 
-} // namespace CLI
+} // namespace cli

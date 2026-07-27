@@ -16,41 +16,41 @@ TEST_CASE("Validators:basic", "[helpers]") { CHECK(true); }
 
 TEST_CASE("Validators: IPValidate1", "[helpers]") {
     std::string ip = "1.1.1.1";
-    CHECK(CLI::ValidIPV4(ip).empty());
+    CHECK(cli::valid_ipv4(ip).empty());
     ip = "224.255.0.1";
-    CHECK(CLI::ValidIPV4(ip).empty());
+    CHECK(cli::valid_ipv4(ip).empty());
     // check that it doesn't work with a trailing .
     ip = "224.255.0.1.";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "-1.255.0.1";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "1.256.0.1";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "1.223.0.";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "1.256.0.1";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "aaa";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "1.2.3.abc";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
     ip = "11.22";
-    CHECK_FALSE(CLI::ValidIPV4(ip).empty());
+    CHECK_FALSE(cli::valid_ipv4(ip).empty());
 }
 
 TEST_CASE("Validators: NumberValidator", "[helpers]") {
     std::string num = "1.1.1.1";
-    CHECK_FALSE(CLI::Number(num).empty());
+    CHECK_FALSE(cli::number(num).empty());
     num = "1.7";
-    CHECK(CLI::Number(num).empty());
+    CHECK(cli::number(num).empty());
     num = "10000";
-    CHECK(CLI::Number(num).empty());
+    CHECK(cli::number(num).empty());
     num = "-0.000";
-    CHECK(CLI::Number(num).empty());
+    CHECK(cli::number(num).empty());
     num = "+1.55";
-    CHECK(CLI::Number(num).empty());
+    CHECK(cli::number(num).empty());
     num = "a";
-    CHECK_FALSE(CLI::Number(num).empty());
+    CHECK_FALSE(cli::number(num).empty());
 }
 
 // Tests positionals validation at the end
@@ -58,9 +58,9 @@ TEST_CASE_METHOD(TApp, "PositionalValidation", "[app]") {
     std::string options;
     std::string foo;
 
-    app.add_option("bar", options)->check(CLI::Number.name("valbar"));
+    app.add_option("bar", options)->check(cli::number.name("valbar"));
     // disable the check on foo
-    app.add_option("foo", foo)->check(CLI::Number.active(false));
+    app.add_option("foo", foo)->check(cli::number.active(false));
     app.validate_positionals();
     args = {"1", "param1"};
     run();
@@ -79,7 +79,7 @@ TEST_CASE_METHOD(TApp, "PositionalValidation", "[app]") {
 
 TEST_CASE_METHOD(TApp, "BoundTests", "[transform]") {
     double value = NAN;
-    app.add_option("-s", value)->transform(CLI::Bound(3.4, 5.9));
+    app.add_option("-s", value)->transform(cli::bound_t(3.4, 5.9));
     args = {"-s", "15"};
     run();
     CHECK(5.9 == value);
@@ -90,7 +90,7 @@ TEST_CASE_METHOD(TApp, "BoundTests", "[transform]") {
 
     // value can't be converted to int so it is just ignored
     args = {"-s", "abcd"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-s", "2.5"};
     run();
@@ -104,26 +104,26 @@ TEST_CASE_METHOD(TApp, "BoundTests", "[transform]") {
 TEST_CASE_METHOD(TApp, "typeCheck", "[app]") {
 
     /// Note that this must be a double in Range, too
-    app.add_option("--one")->check(CLI::TypeValidator<unsigned int>());
+    app.add_option("--one")->check(cli::type_validator_t<unsigned int>());
 
     args = {"--one=1"};
     CHECK_NOTHROW(run());
 
     args = {"--one=-7"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"--one=error"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"--one=4.568"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitCorrectlySplitNumber", "[transform]") {
     std::map<std::string, int> mapping{{"a", 10}, {"b", 100}, {"cc", 1000}};
 
     int value = 0;
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping));
 
     args = {"-n", "42"};
     run();
@@ -144,7 +144,7 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitCorrectlySplitNumber", "[transform]") {
 TEST_CASE_METHOD(TApp, "NumberWithUnitFloatTest", "[transform]") {
     std::map<std::string, double> mapping{{"a", 10}, {"b", 100}, {"cc", 1000}};
     double value{0.0};
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping));
 
     args = {"-n", "42"};
     run();
@@ -167,7 +167,7 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitCaseSensitive", "[transform]") {
     std::map<std::string, int> mapping{{"a", 10}, {"A", 100}};
 
     int value{0};
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping, CLI::AsNumberWithUnit::CASE_SENSITIVE));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping, cli::as_number_with_unit_t::options_t::case_sensitive));
 
     args = {"-n", "42a"};
     run();
@@ -182,7 +182,7 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitCaseInsensitive", "[transform]") {
     std::map<std::string, int> mapping{{"a", 10}, {"B", 100}};
 
     int value{0};
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping, CLI::AsNumberWithUnit::CASE_INSENSITIVE));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping, cli::as_number_with_unit_t::options_t::case_insensitive));
 
     args = {"-n", "42a"};
     run();
@@ -206,8 +206,8 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitMandatoryUnit", "[transform]") {
 
     int value{0};
     app.add_option("-n", value)
-        ->transform(CLI::AsNumberWithUnit(
-            mapping, CLI::AsNumberWithUnit::UNIT_REQUIRED | CLI::AsNumberWithUnit::CASE_SENSITIVE));
+        ->transform(cli::as_number_with_unit_t(
+            mapping, cli::as_number_with_unit_t::options_t::unit_required | cli::as_number_with_unit_t::options_t::case_sensitive));
 
     args = {"-n", "42a"};
     run();
@@ -218,7 +218,7 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitMandatoryUnit", "[transform]") {
     CHECK(4200 == value);
 
     args = {"-n", "42"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitMandatoryUnit2", "[transform]") {
@@ -226,8 +226,8 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitMandatoryUnit2", "[transform]") {
 
     int value{0};
     app.add_option("-n", value)
-        ->transform(CLI::AsNumberWithUnit(
-            mapping, CLI::AsNumberWithUnit::UNIT_REQUIRED | CLI::AsNumberWithUnit::CASE_INSENSITIVE));
+        ->transform(cli::as_number_with_unit_t(
+            mapping, cli::as_number_with_unit_t::options_t::unit_required | cli::as_number_with_unit_t::options_t::case_insensitive));
 
     args = {"-n", "42A"};
     run();
@@ -238,73 +238,73 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitMandatoryUnit2", "[transform]") {
     CHECK(4200 == value);
 
     args = {"-n", "42"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitBadMapping", "[transform]") {
-    CHECK_THROWS_AS(CLI::AsNumberWithUnit(std::map<std::string, int>{{"a", 10}, {"A", 100}},
-                                          CLI::AsNumberWithUnit::CASE_INSENSITIVE),
-                    CLI::ValidationError);
-    CHECK_THROWS_AS(CLI::AsNumberWithUnit(std::map<std::string, int>{{"a", 10}, {"9", 100}}), CLI::ValidationError);
-    CHECK_THROWS_AS(CLI::AsNumberWithUnit(std::map<std::string, int>{{"a", 10}, {"AA A", 100}}), CLI::ValidationError);
-    CHECK_THROWS_AS(CLI::AsNumberWithUnit(std::map<std::string, int>{{"a", 10}, {"", 100}}), CLI::ValidationError);
+    CHECK_THROWS_AS(cli::as_number_with_unit_t(std::map<std::string, int>{{"a", 10}, {"A", 100}},
+                                          cli::as_number_with_unit_t::options_t::case_insensitive),
+                    cli::validation_error_t);
+    CHECK_THROWS_AS(cli::as_number_with_unit_t(std::map<std::string, int>{{"a", 10}, {"9", 100}}), cli::validation_error_t);
+    CHECK_THROWS_AS(cli::as_number_with_unit_t(std::map<std::string, int>{{"a", 10}, {"AA A", 100}}), cli::validation_error_t);
+    CHECK_THROWS_AS(cli::as_number_with_unit_t(std::map<std::string, int>{{"a", 10}, {"", 100}}), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitBadInput", "[transform]") {
     std::map<std::string, int> mapping{{"a", 10}, {"b", 100}};
 
     int value{0};
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping));
 
     args = {"-n", "13 a b"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args = {"-n", "13 c"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args = {"-n", "a"};
     // Assume 1.0 unit
     CHECK_NOTHROW(run());
     args = {"-n", "12.0a"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args = {"-n", "a5"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args = {"-n", ""};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     args = {"-n", "13 a-"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitIntOverflow", "[transform]") {
     std::map<std::string, int> mapping{{"a", 1000000}, {"b", 100}, {"c", 101}};
 
     std::int32_t value = 0;
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping));
 
     args = {"-n", "1000 a"};
     run();
     CHECK(1000000000 == value);
 
     args = {"-n", "1000000 a"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-n", "-1000000 a"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-n", "21474836 b"};
     run();
     CHECK(2147483600 == value);
 
     args = {"-n", "21474836 c"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NumberWithUnitFloatOverflow", "[transform]") {
     std::map<std::string, float> mapping{{"a", 2.f}, {"b", 1.f}, {"c", 0.f}};
 
     float value{0.0F};
-    app.add_option("-n", value)->transform(CLI::AsNumberWithUnit(mapping));
+    app.add_option("-n", value)->transform(cli::as_number_with_unit_t(mapping));
 
     args = {"-n", "3e+38 a"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-n", "3e+38 b"};
     run();
@@ -317,7 +317,7 @@ TEST_CASE_METHOD(TApp, "NumberWithUnitFloatOverflow", "[transform]") {
 
 TEST_CASE_METHOD(TApp, "AsSizeValue1000_1024", "[transform]") {
     std::uint64_t value{0};
-    app.add_option("-s", value)->transform(CLI::AsSizeValue(true));
+    app.add_option("-s", value)->transform(cli::as_size_value_t(true));
 
     args = {"-s", "10240"};
     run();
@@ -430,7 +430,7 @@ TEST_CASE_METHOD(TApp, "duration_test", "[transform]") {
            [&](size_t a_value) { duration = std::chrono::seconds{a_value}; },
            "valid units: sec, min, h, day.")
         ->capture_default_str()
-        ->transform(CLI::AsNumberWithUnit(
+        ->transform(cli::as_number_with_unit_t(
             std::map<std::string, std::size_t>{{"sec", 1}, {"min", 60}, {"h", 3600}, {"day", 24 * 3600}}));
     CHECK_NOTHROW(app.parse(std::vector<std::string>{"1 day", "--duration"}));
 
@@ -439,7 +439,7 @@ TEST_CASE_METHOD(TApp, "duration_test", "[transform]") {
 
 TEST_CASE_METHOD(TApp, "AsSizeValue1024", "[transform]") {
     std::uint64_t value{0};
-    app.add_option("-s", value)->transform(CLI::AsSizeValue(false));
+    app.add_option("-s", value)->transform(cli::as_size_value_t(false));
 
     args = {"-s", "10240"};
     run();
@@ -547,13 +547,13 @@ TEST_CASE_METHOD(TApp, "FileExistsForRead", "[validate]") {
     if(std::filesystem::exists(myfile)) {
         std::filesystem::remove(myfile);
     }
-    CHECK(!CLI::ReadPermissions(myfile).empty());
+    CHECK(!cli::read_permissions(myfile).empty());
 
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
     CHECK(ok);
 
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::ReadPermissions);
+    app.add_option("--file", filename)->check(cli::read_permissions);
     args = {"--file", myfile};
 
     run();
@@ -564,7 +564,7 @@ TEST_CASE_METHOD(TApp, "FileExistsForRead", "[validate]") {
 
 #if !defined(_WIN32)
     // not sure how to make a file unreadable on windows in this context
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 #endif
     std::filesystem::permissions(std::filesystem::path(myfile), std::filesystem::perms::owner_write);
     std::filesystem::remove(myfile);
@@ -575,13 +575,13 @@ TEST_CASE_METHOD(TApp, "FileExistsForWrite", "[validate]") {
     if(std::filesystem::exists(myfile)) {
         std::filesystem::remove(myfile);
     }
-    CHECK(!CLI::WritePermissions(myfile).empty());
+    CHECK(!cli::write_permissions(myfile).empty());
 
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
     CHECK(ok);
 
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::WritePermissions);
+    app.add_option("--file", filename)->check(cli::write_permissions);
     args = {"--file", myfile};
 
     run();
@@ -589,7 +589,7 @@ TEST_CASE_METHOD(TApp, "FileExistsForWrite", "[validate]") {
     CHECK(myfile == filename);
 
     std::filesystem::permissions(std::filesystem::path(myfile), std::filesystem::perms::owner_read);
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     std::remove(myfile.c_str());
 }
@@ -599,13 +599,13 @@ TEST_CASE_METHOD(TApp, "FileExistsForExec", "[validate]") {
     if(std::filesystem::exists(myfile)) {
         std::filesystem::remove(myfile);
     }
-    CHECK(!CLI::ExecPermissions(myfile).empty());
+    CHECK(!cli::exec_permissions(myfile).empty());
 
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
     CHECK(ok);
 
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::ExecPermissions);
+    app.add_option("--file", filename)->check(cli::exec_permissions);
     args = {"--file", myfile};
 
     std::filesystem::permissions(std::filesystem::path(myfile),
@@ -615,7 +615,7 @@ TEST_CASE_METHOD(TApp, "FileExistsForExec", "[validate]") {
     CHECK(myfile == filename);
 #if !defined(_WIN32)
     std::filesystem::permissions(std::filesystem::path(myfile), std::filesystem::perms::owner_read);
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
     // exec permission not really a thing on windows
 #endif
 
@@ -627,13 +627,13 @@ TEST_CASE_METHOD(TApp, "noPermissionCheck", "[validate]") {
     if(std::filesystem::exists(myfile)) {
         std::filesystem::remove(myfile);
     }
-    CHECK(!CLI::detail::PermissionValidator(CLI::detail::Permission::none)(myfile).empty());
+    CHECK(!cli::detail::permission_validator_t(cli::detail::permission_t::none)(myfile).empty());
 
     bool ok = static_cast<bool>(std::ofstream(myfile.c_str()).put('a'));  // create file
     CHECK(ok);
 
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::detail::PermissionValidator(CLI::detail::Permission::none));
+    app.add_option("--file", filename)->check(cli::detail::permission_validator_t(cli::detail::permission_t::none));
     args = {"--file", myfile};
 
     run();
@@ -669,7 +669,7 @@ TEST_CASE_METHOD(TApp, "FileSizeValidatorMinOnly", "[validate]") {
     CHECK(std::filesystem::file_size(largefile) == 100);
 
     // Test min only (at least 50 bytes)
-    CLI::FileSizeValidator minValidator(50);
+    cli::file_size_validator_t minValidator(50);
     CHECK(!minValidator(smallfile).empty());  // smallfile is too small
     CHECK(minValidator(largefile).empty());   // largefile is ok
 
@@ -725,7 +725,7 @@ TEST_CASE_METHOD(TApp, "FileSizeValidatorRange", "[validate]") {
     CHECK(std::filesystem::file_size(hugefile) == 1000);
 
     // Test min and max (between 10 and 200 bytes)
-    CLI::FileSizeValidator rangeValidator(10, 200);
+    cli::file_size_validator_t rangeValidator(10, 200);
     CHECK(!rangeValidator(smallfile).empty());        // smallfile is too small
     CHECK(rangeValidator(largefile).empty());         // largefile is ok
     CHECK(!rangeValidator(hugefile).empty());         // too big
@@ -767,12 +767,12 @@ TEST_CASE_METHOD(TApp, "NonEmptyFile", "[validate]") {
     CHECK(std::filesystem::file_size(nonemptyfile) > 0);
 
     // Test NonEmptyFile
-    CHECK(!CLI::NonEmptyFile(emptyfile).empty());    // empty file fails
-    CHECK(CLI::NonEmptyFile(nonemptyfile).empty());  // non-empty file passes
+    CHECK(!cli::non_empty_file(emptyfile).empty());    // empty file fails
+    CHECK(cli::non_empty_file(nonemptyfile).empty());  // non-empty file passes
 
     // Test with app
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::NonEmptyFile);
+    app.add_option("--file", filename)->check(cli::non_empty_file);
     args = {"--file", nonemptyfile};
     run();
     CHECK(nonemptyfile == filename);
@@ -780,7 +780,7 @@ TEST_CASE_METHOD(TApp, "NonEmptyFile", "[validate]") {
     std::filesystem::remove(emptyfile);
     std::filesystem::remove(nonemptyfile);
     // test with a file that doesn't exist
-    CHECK(!CLI::NonEmptyFile(nonExistingFile).empty());
+    CHECK(!cli::non_empty_file(nonExistingFile).empty());
 }
 
 TEST_CASE_METHOD(TApp, "NonEmptyFileFail", "[validate]") {
@@ -797,9 +797,9 @@ TEST_CASE_METHOD(TApp, "NonEmptyFileFail", "[validate]") {
 
     // Test with app - should fail
     std::string filename = "Failed";
-    app.add_option("--file", filename)->check(CLI::NonEmptyFile);
+    app.add_option("--file", filename)->check(cli::non_empty_file);
     args = {"--file", emptyfile};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     std::filesystem::remove(emptyfile);
 }

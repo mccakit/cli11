@@ -9,14 +9,14 @@ import std;
 import cli11;
 import test_helper;
 
-class SimpleFormatter : public CLI::FormatterBase
+class SimpleFormatter : public cli::formatter_base_t
 {
     public:
-        SimpleFormatter() : FormatterBase()
+        SimpleFormatter() : formatter_base_t()
         {
         }
 
-        std::string make_help(const CLI::App *, std::string, CLI::AppFormatMode) const override
+        std::string make_help(const cli::app_t *, std::string, cli::app_format_mode_t) const override
         {
             return "This is really simple";
         }
@@ -24,7 +24,7 @@ class SimpleFormatter : public CLI::FormatterBase
 
 TEST_CASE("Formatter: Nothing", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.formatter(std::make_shared<SimpleFormatter>());
 
@@ -35,10 +35,10 @@ TEST_CASE("Formatter: Nothing", "[formatter]")
 
 TEST_CASE("Formatter: NothingLambda", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.formatter_fn(
-        [](const CLI::App *, std::string, CLI::AppFormatMode) { return std::string("This is really simple"); });
+        [](const cli::app_t *, std::string, cli::app_format_mode_t) { return std::string("This is really simple"); });
 
     std::string help = app.help();
 
@@ -47,9 +47,9 @@ TEST_CASE("Formatter: NothingLambda", "[formatter]")
 
 TEST_CASE("Formatter: OptCustomize", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
-    auto optfmt = std::make_shared<CLI::Formatter>();
+    auto optfmt = std::make_shared<cli::formatter_t>();
     optfmt->column_width(25);
     optfmt->label("REQUIRED", "(MUST HAVE)");
     app.formatter(optfmt);
@@ -67,7 +67,7 @@ TEST_CASE("Formatter: OptCustomize", "[formatter]")
 
 TEST_CASE("Formatter: OptCustomizeSimple", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
     app.get_formatter()->label("REQUIRED", "(MUST HAVE)");
@@ -86,7 +86,7 @@ TEST_CASE("Formatter: OptCustomizeSimple", "[formatter]")
 
 TEST_CASE("Formatter: OptCustomizeOptionText", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
 
@@ -100,7 +100,7 @@ TEST_CASE("Formatter: OptCustomizeOptionText", "[formatter]")
 
 TEST_CASE("Formatter: OptBaseExample", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
 
@@ -122,7 +122,7 @@ TEST_CASE("Formatter: OptBaseExample", "[formatter]")
 }
 TEST_CASE("Formatter: OptDefaults", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
 
@@ -141,7 +141,7 @@ TEST_CASE("Formatter: OptDefaults", "[formatter]")
 
 TEST_CASE("Formatter: OptTypes", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
 
@@ -160,7 +160,7 @@ TEST_CASE("Formatter: OptTypes", "[formatter]")
 
 TEST_CASE("Formatter: FalseFlagExample", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
     app.get_formatter()->label("REQUIRED", "(MUST HAVE)");
@@ -180,7 +180,7 @@ TEST_CASE("Formatter: FalseFlagExample", "[formatter]")
 
 TEST_CASE("Formatter: FalseFlagExampleDisable", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->column_width(25);
 
@@ -205,10 +205,10 @@ TEST_CASE("Formatter: FalseFlagExampleDisable", "[formatter]")
 
 TEST_CASE("Formatter: AppCustomize", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.add_subcommand("subcom1", "This");
 
-    auto appfmt = std::make_shared<CLI::Formatter>();
+    auto appfmt = std::make_shared<cli::formatter_t>();
     appfmt->column_width(20);
     appfmt->label("Usage", "Run");
     app.formatter(appfmt);
@@ -224,7 +224,7 @@ TEST_CASE("Formatter: AppCustomize", "[formatter]")
 
 TEST_CASE("Formatter: AppCustomizeSimple", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     app.add_subcommand("subcom1", "This");
 
     app.get_formatter()->column_width(20);
@@ -241,22 +241,22 @@ TEST_CASE("Formatter: AppCustomizeSimple", "[formatter]")
 
 TEST_CASE("Formatter: AllSub", "[formatter]")
 {
-    CLI::App app {"My prog"};
-    CLI::App *sub = app.add_subcommand("subcom", "This");
+    cli::app_t app {"My prog"};
+    cli::app_t *sub = app.add_subcommand("subcom", "This");
     sub->add_flag("--insub", "MyFlag");
 
-    std::string help = app.help("", CLI::AppFormatMode::All);
+    std::string help = app.help("", cli::app_format_mode_t::all);
     CHECK_THAT(help, Contains("--insub"));
     CHECK_THAT(help, Contains("subcom"));
 }
 
 TEST_CASE("Formatter: AllSubRequired", "[formatter]")
 {
-    CLI::App app {"My prog"};
-    CLI::App *sub = app.add_subcommand("subcom", "This");
+    cli::app_t app {"My prog"};
+    cli::app_t *sub = app.add_subcommand("subcom", "This");
     sub->add_flag("--insub", "MyFlag");
     sub->required();
-    std::string help = app.help("", CLI::AppFormatMode::All);
+    std::string help = app.help("", cli::app_format_mode_t::all);
     CHECK_THAT(help, Contains("--insub"));
     CHECK_THAT(help, Contains("subcom"));
     CHECK_THAT(help, Contains("REQUIRED"));
@@ -264,26 +264,26 @@ TEST_CASE("Formatter: AllSubRequired", "[formatter]")
 
 TEST_CASE("Formatter: NamelessSub", "[formatter]")
 {
-    CLI::App app {"My prog"};
-    CLI::App *sub = app.add_subcommand("", "This subcommand");
+    cli::app_t app {"My prog"};
+    cli::app_t *sub = app.add_subcommand("", "This subcommand");
     sub->add_flag("--insub", "MyFlag");
 
-    std::string help = app.help("", CLI::AppFormatMode::Normal);
+    std::string help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, Contains("--insub"));
     CHECK_THAT(help, Contains("This subcommand"));
 }
 
 TEST_CASE("Formatter: NamelessSubInGroup", "[formatter]")
 {
-    CLI::App app {"My prog"};
-    CLI::App *sub = app.add_subcommand("", "This subcommand");
-    CLI::App *sub2 = app.add_subcommand("sub2", "subcommand2");
+    cli::app_t app {"My prog"};
+    cli::app_t *sub = app.add_subcommand("", "This subcommand");
+    cli::app_t *sub2 = app.add_subcommand("sub2", "subcommand2");
     sub->add_flag("--insub", "MyFlag");
     int val {0};
     sub2->add_option("pos", val, "positional");
     sub->group("group1");
     sub2->group("group1");
-    std::string help = app.help("", CLI::AppFormatMode::Normal);
+    std::string help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, Contains("--insub"));
     CHECK_THAT(help, Contains("This subcommand"));
     CHECK_THAT(help, Contains("group1"));
@@ -293,7 +293,7 @@ TEST_CASE("Formatter: NamelessSubInGroup", "[formatter]")
 
 TEST_CASE("Formatter: Footer", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::string footer_string {
         "this is       a test of the footer "
         "systemsssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss to  Pr e  s "
@@ -303,24 +303,24 @@ TEST_CASE("Formatter: Footer", "[formatter]")
     app.get_formatter()->footer_paragraph_width(50);
     app.get_formatter()->enable_footer_formatting(false);
     CHECK(!app.get_formatter()->is_footer_paragraph_formatting_enabled());
-    std::string help = app.help("", CLI::AppFormatMode::Normal);
+    std::string help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, Contains("is       a"));
     CHECK_THAT(help, Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, Contains(footer_string));
 
-    help = app.help("", CLI::AppFormatMode::Sub);
+    help = app.help("", cli::app_format_mode_t::sub);
     CHECK_THAT(help, Contains("is       a"));
     CHECK_THAT(help, Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, Contains(footer_string));
 
     app.get_formatter()->enable_footer_formatting(true);
     CHECK(app.get_formatter()->is_footer_paragraph_formatting_enabled());
-    help = app.help("", CLI::AppFormatMode::Normal);
+    help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, !Contains("is       a"));
     CHECK_THAT(help, !Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, !Contains(footer_string));
 
-    help = app.help("", CLI::AppFormatMode::Sub);
+    help = app.help("", cli::app_format_mode_t::sub);
     CHECK_THAT(help, !Contains("is       a"));
     CHECK_THAT(help, !Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, !Contains(footer_string));
@@ -328,7 +328,7 @@ TEST_CASE("Formatter: Footer", "[formatter]")
 
 TEST_CASE("Formatter: Description", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
     std::string desc_string {"this is       a test of the footer "
                              "systemsssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss to  Pr e  s  "
                              "e  r  v  e  SPA C ES"};
@@ -337,24 +337,24 @@ TEST_CASE("Formatter: Description", "[formatter]")
     app.get_formatter()->description_paragraph_width(50);
     app.get_formatter()->enable_description_formatting(false);
     CHECK(!app.get_formatter()->is_description_paragraph_formatting_enabled());
-    std::string help = app.help("", CLI::AppFormatMode::Normal);
+    std::string help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, Contains("is       a"));
     CHECK_THAT(help, Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, Contains(desc_string));
 
-    help = app.help("", CLI::AppFormatMode::Sub);
+    help = app.help("", cli::app_format_mode_t::sub);
     CHECK_THAT(help, Contains("is       a"));
     CHECK_THAT(help, Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, Contains(desc_string));
 
     app.get_formatter()->enable_description_formatting(true);
     CHECK(app.get_formatter()->is_description_paragraph_formatting_enabled());
-    help = app.help("", CLI::AppFormatMode::Normal);
+    help = app.help("", cli::app_format_mode_t::normal);
     CHECK_THAT(help, !Contains("is       a"));
     CHECK_THAT(help, !Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, !Contains(desc_string));
 
-    help = app.help("", CLI::AppFormatMode::Sub);
+    help = app.help("", cli::app_format_mode_t::sub);
     CHECK_THAT(help, !Contains("is       a"));
     CHECK_THAT(help, !Contains("to  Pr e  s  e  r  v  e  SPA C ES"));
     CHECK_THAT(help, !Contains(desc_string));
@@ -362,7 +362,7 @@ TEST_CASE("Formatter: Description", "[formatter]")
 
 TEST_CASE("Formatter: LongOptionAlignment", "[formatter]")
 {
-    CLI::App app {"My prog"};
+    cli::app_t app {"My prog"};
 
     app.get_formatter()->long_option_alignment_ratio(6 / 30.f);
 

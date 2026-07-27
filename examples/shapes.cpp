@@ -10,7 +10,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("load shapes");
+    cli::app_t app("load shapes");
 
     app.set_help_all_flag("--help-all");
     auto *circle = app.add_subcommand("circle", "draw a circle")->immediate_callback();
@@ -46,7 +46,7 @@ int main(int argc, char **argv)
     tri->callback([&sides, &tri_counter] {
         ++tri_counter;
 
-        std::cout << "triangle" << tri_counter << " with sides [" << CLI::detail::join(sides) << "]\n";
+        std::cout << "triangle" << tri_counter << " with sides [" << cli::detail::join(sides) << "]\n";
     });
 
     tri->add_option("sides", sides, "the side lengths of the triangle");
@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

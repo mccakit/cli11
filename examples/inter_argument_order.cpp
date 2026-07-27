@@ -9,7 +9,7 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::App app {"An app to practice mixing unlimited arguments, but still recover the original order."};
+    cli::app_t app {"An app to practice mixing unlimited arguments, but still recover the original order."};
 
     std::vector<int> foos;
     auto *foo = app.add_option("--foo,-f", foos, "Some unlimited argument");
@@ -24,7 +24,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

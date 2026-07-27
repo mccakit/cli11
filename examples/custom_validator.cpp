@@ -7,16 +7,16 @@
 import std;
 import cli11;
 
-template <typename T> class DeltaRange : public CLI::Validator
+template <typename T> class DeltaRange : public cli::validator_t
 {
     public:
         T center_point;
         T delta;
         DeltaRange(const T &center, const T &range)
-            : CLI::Validator(
+            : cli::validator_t(
                   [this](const std::string &value) -> std::string {
                       T newValue;
-                      auto result = CLI::detail::lexical_cast(value, newValue);
+                      auto result = cli::detail::lexical_cast(value, newValue);
                       if (!(result && this->check(newValue)))
                       {
                           return std::string("value not within range");
@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     /* this application creates custom validator which is a range center+/- range The center and range can be defined by
      * other command line options and are updated dynamically
      */
-    CLI::App app("custom range validator");
+    cli::app_t app("custom range validator");
 
     std::string value;
     auto dr = std::make_shared<DeltaRange<int>>(7, 3);
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

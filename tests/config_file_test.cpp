@@ -12,45 +12,45 @@ import test_helper;
 TEST_CASE("StringBased: convert_arg_for_ini", "[config]")
 {
 
-    CHECK("\"\"" == CLI::detail::convert_arg_for_ini(std::string {}));
+    CHECK("\"\"" == cli::detail::convert_arg_for_ini(std::string {}));
 
-    CHECK("true" == CLI::detail::convert_arg_for_ini("true"));
+    CHECK("true" == cli::detail::convert_arg_for_ini("true"));
 
-    CHECK("nan" == CLI::detail::convert_arg_for_ini("nan"));
+    CHECK("nan" == cli::detail::convert_arg_for_ini("nan"));
 
-    CHECK("\"happy hippo\"" == CLI::detail::convert_arg_for_ini("happy hippo"));
+    CHECK("\"happy hippo\"" == cli::detail::convert_arg_for_ini("happy hippo"));
 
-    CHECK("47" == CLI::detail::convert_arg_for_ini("47"));
+    CHECK("47" == cli::detail::convert_arg_for_ini("47"));
 
-    CHECK("47.365225" == CLI::detail::convert_arg_for_ini("47.365225"));
+    CHECK("47.365225" == cli::detail::convert_arg_for_ini("47.365225"));
 
-    CHECK("+3.28e-25" == CLI::detail::convert_arg_for_ini("+3.28e-25"));
-    CHECK("-22E14" == CLI::detail::convert_arg_for_ini("-22E14"));
+    CHECK("+3.28e-25" == cli::detail::convert_arg_for_ini("+3.28e-25"));
+    CHECK("-22E14" == cli::detail::convert_arg_for_ini("-22E14"));
 
-    CHECK("'a'" == CLI::detail::convert_arg_for_ini("a"));
+    CHECK("'a'" == cli::detail::convert_arg_for_ini("a"));
 
-    CHECK("'\\'" == CLI::detail::convert_arg_for_ini("\\"));
+    CHECK("'\\'" == cli::detail::convert_arg_for_ini("\\"));
 
-    CHECK("\"'\"" == CLI::detail::convert_arg_for_ini("'"));
+    CHECK("\"'\"" == cli::detail::convert_arg_for_ini("'"));
 
     std::string tstring1;
     tstring1.push_back('\0');
     // binary string conversion single character
-    CHECK("'B\"(\\x00)\"'" == CLI::detail::convert_arg_for_ini(tstring1));
+    CHECK("'B\"(\\x00)\"'" == cli::detail::convert_arg_for_ini(tstring1));
     // hex
-    CHECK("0x5461FAED" == CLI::detail::convert_arg_for_ini("0x5461FAED"));
+    CHECK("0x5461FAED" == cli::detail::convert_arg_for_ini("0x5461FAED"));
     // hex fail
-    CHECK("\"0x5461FAEG\"" == CLI::detail::convert_arg_for_ini("0x5461FAEG"));
+    CHECK("\"0x5461FAEG\"" == cli::detail::convert_arg_for_ini("0x5461FAEG"));
 
     // octal
-    CHECK("0o546123567" == CLI::detail::convert_arg_for_ini("0o546123567"));
+    CHECK("0o546123567" == cli::detail::convert_arg_for_ini("0o546123567"));
     // octal fail
-    CHECK("\"0o546123587\"" == CLI::detail::convert_arg_for_ini("0o546123587"));
+    CHECK("\"0o546123587\"" == cli::detail::convert_arg_for_ini("0o546123587"));
 
     // binary
-    CHECK("0b01101110010" == CLI::detail::convert_arg_for_ini("0b01101110010"));
+    CHECK("0b01101110010" == cli::detail::convert_arg_for_ini("0b01101110010"));
     // binary fail
-    CHECK("\"0b01102110010\"" == CLI::detail::convert_arg_for_ini("0b01102110010"));
+    CHECK("\"0b01102110010\"" == cli::detail::convert_arg_for_ini("0b01102110010"));
 }
 
 TEST_CASE("StringBased: IniJoin", "[config]")
@@ -58,15 +58,15 @@ TEST_CASE("StringBased: IniJoin", "[config]")
     std::vector<std::string> items = {"one", "two", "three four"};
     std::string result = R"("one" "two" "three four")";
 
-    CHECK(result == CLI::detail::ini_join(items, ' ', '\0', '\0'));
+    CHECK(result == cli::detail::ini_join(items, ' ', '\0', '\0'));
 
     result = R"(["one", "two", "three four"])";
 
-    CHECK(result == CLI::detail::ini_join(items));
+    CHECK(result == cli::detail::ini_join(items));
 
     result = R"({"one"; "two"; "three four"})";
 
-    CHECK(result == CLI::detail::ini_join(items, ';', '{', '}'));
+    CHECK(result == cli::detail::ini_join(items, ';', '{', '}'));
 }
 
 TEST_CASE("StringBased: First", "[config]")
@@ -78,7 +78,7 @@ TEST_CASE("StringBased: First", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 2u);
     CHECK(output.at(0).name == "one");
@@ -101,7 +101,7 @@ TEST_CASE("StringBased: FirstWithComments", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 2u);
     CHECK(output.at(0).name == "one");
@@ -122,7 +122,7 @@ TEST_CASE("StringBased: Quotes", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -146,7 +146,7 @@ TEST_CASE("StringBased: Vector", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -177,7 +177,7 @@ TEST_CASE("StringBased: TomlVector", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 5u);
     CHECK(output.at(0).name == "one");
@@ -216,7 +216,7 @@ TEST_CASE("StringBased: TomlMultiLineString1", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -242,7 +242,7 @@ TEST_CASE("StringBased: TomlMultiLineString2", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -269,7 +269,7 @@ TEST_CASE("StringBased: TomlMultiLineString3", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -296,7 +296,7 @@ TEST_CASE("StringBased: TomlMultiLineString4", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -324,7 +324,7 @@ TEST_CASE("StringBased: TomlMultiLineString5", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -348,7 +348,7 @@ TEST_CASE("StringBased: TomlMultiLineString6", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 3u);
     CHECK(output.at(0).name == "one");
@@ -372,7 +372,7 @@ TEST_CASE("StringBased: TomlMultiLineStringError", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    CHECK_THROWS(CLI::ConfigINI().from_config(ofile));
+    CHECK_THROWS(cli::config_ini_t().from_config(ofile));
 }
 
 TEST_CASE("StringBased: Spaces", "[config]")
@@ -384,7 +384,7 @@ TEST_CASE("StringBased: Spaces", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 2u);
     CHECK(output.at(0).name == "one");
@@ -405,7 +405,7 @@ TEST_CASE("StringBased: Sections", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 4u);
     CHECK(output.at(0).name == "one");
@@ -429,7 +429,7 @@ TEST_CASE("StringBased: SpacesSections", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     CHECK(output.size() == 4u);
     CHECK(output.at(0).name == "one");
@@ -447,7 +447,7 @@ TEST_CASE("StringBased: SpacesSections", "[config]")
 }
 
 // check function to make sure that open sections match close sections
-bool checkSections(const std::vector<CLI::ConfigItem> &output)
+bool checkSections(const std::vector<cli::config_item_t> &output)
 {
     std::set<std::string> open;
     for (const auto &ci : output)
@@ -489,7 +489,7 @@ TEST_CASE("StringBased: Layers", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 4 openings and 4 closings
     CHECK(output.size() == 10u);
@@ -506,7 +506,7 @@ TEST_CASE("StringBased: LayersSkip", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 4 openings and 4 closings
     CHECK(output.size() == 10u);
@@ -523,7 +523,7 @@ TEST_CASE("StringBased: LayersSkipOrdered", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 4 openings and 4 closings
     CHECK(output.size() == 12u);
@@ -540,7 +540,7 @@ TEST_CASE("StringBased: LayersChange", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 3 openings and 3 closings
     CHECK(output.size() == 8u);
@@ -557,7 +557,7 @@ TEST_CASE("StringBased: Layers2LevelChange", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 5 openings and 5 closings
     CHECK(output.size() == 12u);
@@ -574,7 +574,7 @@ TEST_CASE("StringBased: Layers2LevelChangeInQuotes", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 5 openings and 5 closings
     CHECK(output.size() == 12u);
@@ -591,7 +591,7 @@ TEST_CASE("StringBased: Layers2LevelChangeInQuotesWithDot", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 3 openings and 3 closings
     CHECK(output.size() == 8u);
@@ -607,7 +607,7 @@ TEST_CASE("StringBased: Layers3LevelChange", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 1 flags and 7 openings and 7 closings
     CHECK(output.size() == 15u);
@@ -624,7 +624,7 @@ TEST_CASE("StringBased: newSegment", "[config]")
     ofile << "absolute_newest = true\n";
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 5 openings and 5 closings
     CHECK(output.size() == 12u);
@@ -641,7 +641,7 @@ TEST_CASE("StringBased: LayersDirect", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 2 flags and 4 openings and 4 closings
     CHECK(output.size() == 10u);
@@ -662,7 +662,7 @@ TEST_CASE("StringBased: LayersComplex", "[config]")
 
     ofile.seekg(0, std::ios::beg);
 
-    std::vector<CLI::ConfigItem> output = CLI::ConfigINI().from_config(ofile);
+    std::vector<cli::config_item_t> output = cli::config_ini_t().from_config(ofile);
 
     // 4 flags and 6 openings and 6 closings
     CHECK(output.size() == 16u);
@@ -671,7 +671,7 @@ TEST_CASE("StringBased: LayersComplex", "[config]")
 
 TEST_CASE("StringBased: file_error", "[config]")
 {
-    CHECK_THROWS_AS(CLI::ConfigINI().from_file("nonexist_file"), CLI::FileError);
+    CHECK_THROWS_AS(cli::config_ini_t().from_file("nonexist_file"), cli::file_error_t);
 }
 
 static const int fclear1 = fileClear("TestIniTmp.ini");
@@ -760,7 +760,7 @@ TEST_CASE_METHOD(TApp, "IniIgnoreRemainingOption", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
 
     app.set_config("--config", tmpini);
-    app.allow_config_extras(CLI::config_extras_mode::ignore);
+    app.allow_config_extras(cli::config_extras_mode_t::ignore);
 
     {
         std::ofstream out {tmpini};
@@ -838,11 +838,11 @@ TEST_CASE_METHOD(TApp, "IniRequiredNoDefault", "[config]")
 
     int two {0};
     app.add_option("--two", two);
-    REQUIRE_THROWS_AS(run(), CLI::RequiredError);
+    REQUIRE_THROWS_AS(run(), cli::required_error_t);
     // test to make sure help still gets called correctly
     // GitHub issue #533 https://github.com/CLIUtils/CLI11/issues/553
     args = {"--help"};
-    REQUIRE_THROWS_AS(run(), CLI::CallForHelp);
+    REQUIRE_THROWS_AS(run(), cli::call_for_help_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniNotRequiredNoDefault", "[config]")
@@ -856,18 +856,18 @@ TEST_CASE_METHOD(TApp, "IniNotRequiredNoDefault", "[config]")
 }
 
 /// Define a class for testing purposes that does bad things
-class EvilConfig : public CLI::Config
+class EvilConfig : public cli::config_t
 {
     public:
         EvilConfig() = default;
-        std::string to_config(const CLI::App *, bool, bool, std::string) const override
+        std::string to_config(const cli::app_t *, bool, bool, std::string) const override
         {
-            throw CLI::FileError("evil");
+            throw cli::file_error_t("evil");
         }
 
-        std::vector<CLI::ConfigItem> from_config(std::istream &) const override
+        std::vector<cli::config_item_t> from_config(std::istream &) const override
         {
-            throw CLI::FileError("evil");
+            throw cli::file_error_t("evil");
         }
 };
 
@@ -885,13 +885,13 @@ TEST_CASE_METHOD(TApp, "IniRequiredbadConfigurator", "[config]")
 
     app.set_config("--config", tmpini)->required();
     auto evil = std::make_shared<EvilConfig>();
-    std::shared_ptr<CLI::Config> evilptr = evil;
+    std::shared_ptr<cli::config_t> evilptr = evil;
     app.config_formatter(evil);
     int two {0};
     app.add_option("--two", two);
-    REQUIRE_THROWS_AS(run(), CLI::FileError);
+    REQUIRE_THROWS_AS(run(), cli::file_error_t);
 
-    REQUIRE_THROWS_AS(evilptr->to_config(&app, CLI::ConfigOutputMode::Active, true, ""), CLI::FileError);
+    REQUIRE_THROWS_AS(evilptr->to_config(&app, cli::config_output_mode_t::active, true, ""), cli::file_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniNotRequiredBadConfigurator", "[config]")
@@ -983,7 +983,7 @@ TEST_CASE_METHOD(TApp, "IniEnvironmentalFileName", "[config]")
 
     unset_env("CONFIG");
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultiConfig", "[config]")
@@ -1034,7 +1034,7 @@ TEST_CASE_METHOD(TApp, "MultiConfig_takelast", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
     TempFile tmpini2 {"TestIniTmp2.ini"};
 
-    app.set_config("--config")->multi_option_policy(CLI::MultiOptionPolicy::TakeLast)->expected(1, 3);
+    app.set_config("--config")->multi_option_policy(cli::multi_option_policy_t::take_last)->expected(1, 3);
 
     {
         std::ofstream out {tmpini};
@@ -1077,7 +1077,7 @@ TEST_CASE_METHOD(TApp, "MultiConfig_takeAll", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
     TempFile tmpini2 {"TestIniTmp2.ini"};
 
-    app.set_config("--config")->multi_option_policy(CLI::MultiOptionPolicy::TakeAll);
+    app.set_config("--config")->multi_option_policy(cli::multi_option_policy_t::take_all);
 
     {
         std::ofstream out {tmpini};
@@ -1120,7 +1120,7 @@ TEST_CASE_METHOD(TApp, "MultiConfig_single", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
     TempFile tmpini2 {"TestIniTmp2.ini"};
 
-    app.set_config("--config")->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    app.set_config("--config")->multi_option_policy(cli::multi_option_policy_t::take_last);
 
     {
         std::ofstream out {tmpini};
@@ -1163,7 +1163,7 @@ TEST_CASE_METHOD(TApp, "IniRequiredNotFound", "[config]")
     std::string noini = "TestIniNotExist.ini";
     app.set_config("--config", noini, "", true);
 
-    CHECK_THROWS_AS(run(), CLI::FileError);
+    CHECK_THROWS_AS(run(), cli::file_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniDefaultNotExist", "[config]")
@@ -1184,7 +1184,7 @@ TEST_CASE_METHOD(TApp, "IniNotRequiredPassedNotFound", "[config]")
     app.set_config("--config", "", "", false);
 
     args = {"--config", noini};
-    CHECK_THROWS_AS(run(), CLI::FileError);
+    CHECK_THROWS_AS(run(), cli::file_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniOverwrite", "[config]")
@@ -1311,11 +1311,11 @@ TEST_CASE_METHOD(TApp, "IniRequired", "[config]")
 
     args = {};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--two=2"};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniInlineComment", "[config]")
@@ -1324,7 +1324,7 @@ TEST_CASE_METHOD(TApp, "IniInlineComment", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
 
     app.set_config("--config", tmpini, "", true);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
 
     {
         std::ofstream out {tmpini};
@@ -1355,11 +1355,11 @@ TEST_CASE_METHOD(TApp, "IniInlineComment", "[config]")
 
     args = {};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--two=2"};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "TomlInlineComment", "[config]")
@@ -1398,11 +1398,11 @@ TEST_CASE_METHOD(TApp, "TomlInlineComment", "[config]")
 
     args = {};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--two=2"};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "TomlDocStringComment", "[config]")
@@ -1498,16 +1498,16 @@ TEST_CASE_METHOD(TApp, "ConfigModifiers", "[config]")
     cfgptr->section("test");
     CHECK(cfgptr->section() == "test");
 
-    CHECK(cfgptr->sectionRef() == "test");
-    auto &sref = cfgptr->sectionRef();
+    CHECK(cfgptr->section_ref() == "test");
+    auto &sref = cfgptr->section_ref();
     sref = "this";
     CHECK(cfgptr->section() == "this");
 
     cfgptr->index(5);
     CHECK(cfgptr->index() == 5);
 
-    CHECK(cfgptr->indexRef() == 5);
-    auto &iref = cfgptr->indexRef();
+    CHECK(cfgptr->index_ref() == 5);
+    auto &iref = cfgptr->index_ref();
     iref = 7;
     CHECK(cfgptr->index() == 7);
 }
@@ -1654,7 +1654,7 @@ TEST_CASE_METHOD(TApp, "ColonValueSep", "[config]")
     app.add_option("--two", two);
     app.add_option("--three", three);
 
-    app.get_config_formatter_base()->valueSeparator(':');
+    app.get_config_formatter_base()->value_separator(':');
 
     run();
 
@@ -1669,7 +1669,7 @@ TEST_CASE_METHOD(TApp, "TOMLVectordirect", "[config]")
 
     app.set_config("--config", tmpini);
 
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
 
     {
         std::ofstream out {tmpini};
@@ -1696,7 +1696,7 @@ TEST_CASE_METHOD(TApp, "TOMLVectorVector", "[config]")
 
     app.set_config("--config", tmpini);
 
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
 
     {
         std::ofstream out {tmpini};
@@ -1732,8 +1732,8 @@ TEST_CASE_METHOD(TApp, "TOMLVectorVectorSeparated", "[config]")
 
     app.set_config("--config", tmpini);
 
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
-    app.get_config_formatter_base()->allowDuplicateFields();
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
+    app.get_config_formatter_base()->allow_duplicate_fields();
     {
         std::ofstream out {tmpini};
         out << "#this is a comment line\n";
@@ -1762,8 +1762,8 @@ TEST_CASE_METHOD(TApp, "TOMLVectorVectorSeparatedSingleElement", "[config]")
 
     app.set_config("--config", tmpini);
 
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
-    app.get_config_formatter_base()->allowDuplicateFields();
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
+    app.get_config_formatter_base()->allow_duplicate_fields();
     {
         std::ofstream out {tmpini};
         out << "#this is a comment line\n";
@@ -2020,7 +2020,7 @@ TEST_CASE_METHOD(TApp, "IniLayeredDotSection", "[config]")
 
     three = 0;
     // check maxlayers
-    app.get_config_formatter_base()->maxLayers(1);
+    app.get_config_formatter_base()->max_layers(1);
     run();
     CHECK(three == 0);
 }
@@ -2060,7 +2060,7 @@ TEST_CASE_METHOD(TApp, "IniLayeredDotSectionInQuotes", "[config]")
 
     three = 0;
     // check maxlayers
-    app.get_config_formatter_base()->maxLayers(1);
+    app.get_config_formatter_base()->max_layers(1);
     run();
     CHECK(three == 0);
 }
@@ -2081,7 +2081,7 @@ TEST_CASE_METHOD(TApp, "IniLayeredCustomSectionSeparator", "[config]")
         out << "[subcom|subsubcom]" << '\n';
         out << "val=3" << '\n';
     }
-    app.get_config_formatter_base()->parentSeparator('|');
+    app.get_config_formatter_base()->parent_separator('|');
     int one {0}, two {0}, three {0};
     app.add_option("--val", one);
     auto *subcom = app.add_subcommand("subcom");
@@ -2287,7 +2287,7 @@ TEST_CASE_METHOD(TApp, "IniSubcommandConfigurableHelp", "[config]")
     subcom->add_option("--val", two);
 
     args = {"--help"};
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 
     auto helpres = app.help();
     CHECK_THAT(helpres, Contains("--helptest"));
@@ -2422,7 +2422,7 @@ TEST_CASE_METHOD(TApp, "jsonLikeParsing", "[config]")
     TempFile tmpjson {"TestJsonTmp.json"};
 
     app.set_config("--config", tmpjson);
-    app.get_config_formatter_base()->valueSeparator(':');
+    app.get_config_formatter_base()->value_separator(':');
 
     {
         std::ofstream out {tmpjson};
@@ -2478,7 +2478,7 @@ TEST_CASE_METHOD(TApp, "TomlSectionNumber", "[config]")
 
     CHECK(2 == val);
 
-    auto &index = app.get_config_formatter_base()->indexRef();
+    auto &index = app.get_config_formatter_base()->index_ref();
     index = 1;
     run();
 
@@ -2647,7 +2647,7 @@ TEST_CASE_METHOD(TApp, "IniFailure", "[config]")
         out << "val=1" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ConfigError);
+    CHECK_THROWS_AS(run(), cli::config_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniConfigurable", "[config]")
@@ -2684,8 +2684,8 @@ TEST_CASE_METHOD(TApp, "IniNotConfigurable", "[config]")
         out << "val=1" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ConfigError);
-    app.allow_config_extras(CLI::config_extras_mode::ignore_all);
+    CHECK_THROWS_AS(run(), cli::config_error_t);
+    app.allow_config_extras(cli::config_extras_mode_t::ignore_all);
     CHECK_NOTHROW(run());
 }
 
@@ -2723,7 +2723,7 @@ TEST_CASE_METHOD(TApp, "IniFlagInvalidDisableOverrideFlagArray", "[config]")
         out << "val=[1,true,false,not_valid]" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::InvalidError);
+    CHECK_THROWS_AS(run(), cli::invalid_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniSubFailure", "[config]")
@@ -2740,7 +2740,7 @@ TEST_CASE_METHOD(TApp, "IniSubFailure", "[config]")
         out << "val=1" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ConfigError);
+    CHECK_THROWS_AS(run(), cli::config_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniNoSubFailure", "[config]")
@@ -2749,14 +2749,14 @@ TEST_CASE_METHOD(TApp, "IniNoSubFailure", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
 
     app.set_config("--config", tmpini);
-    app.allow_config_extras(CLI::config_extras_mode::error);
+    app.allow_config_extras(cli::config_extras_mode_t::error);
     {
         std::ofstream out {tmpini};
         out << "[other]" << '\n';
         out << "val=1" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ConfigError);
+    CHECK_THROWS_AS(run(), cli::config_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniFlagConvertFailure", "[config]")
@@ -2774,7 +2774,7 @@ TEST_CASE_METHOD(TApp, "IniFlagConvertFailure", "[config]")
     run();
     bool result {false};
     auto *opt = app.get_option("--flag");
-    CHECK_THROWS_AS(opt->results(result), CLI::ConversionError);
+    CHECK_THROWS_AS(opt->results(result), cli::conversion_error_t);
     std::string res;
     opt->results(res);
     CHECK("moobook" == res);
@@ -2804,7 +2804,7 @@ TEST_CASE_METHOD(TApp, "IniFlagDual", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
 
     bool boo {false};
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     app.add_flag("--flag", boo);
     app.set_config("--config", tmpini);
 
@@ -2813,7 +2813,7 @@ TEST_CASE_METHOD(TApp, "IniFlagDual", "[config]")
         out << "flag=1 1" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniVectorMax", "[config]")
@@ -2822,7 +2822,7 @@ TEST_CASE_METHOD(TApp, "IniVectorMax", "[config]")
     TempFile tmpini {"TestIniTmp.ini"};
 
     std::vector<std::string> v1;
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     app.add_option("--vec", v1)->expected(0, 2);
     app.set_config("--config", tmpini);
 
@@ -2831,7 +2831,7 @@ TEST_CASE_METHOD(TApp, "IniVectorMax", "[config]")
         out << "vec=[a,b,c]" << '\n';
     }
 
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniShort", "[config]")
@@ -2913,7 +2913,7 @@ TEST_CASE_METHOD(TApp, "IniDefaultPath", "[config]")
 
     int key {0};
     app.add_option("--flag,-f", key);
-    app.set_config("--config", "TestIniTmp.ini")->transform(CLI::FileOnDefaultPath("../"));
+    app.set_config("--config", "TestIniTmp.ini")->transform(cli::file_on_default_path_t("../"));
 
     {
         std::ofstream out {tmpini};
@@ -2932,8 +2932,8 @@ TEST_CASE_METHOD(TApp, "IniMultipleDefaultPath", "[config]")
     int key {0};
     app.add_option("--flag,-f", key);
     auto *cfgOption = app.set_config("--config", "doesnotexist.ini")
-                          ->transform(CLI::FileOnDefaultPath("../"))
-                          ->transform(CLI::FileOnDefaultPath("../other", false));
+                          ->transform(cli::file_on_default_path_t("../"))
+                          ->transform(cli::file_on_default_path_t("../other", false));
 
     {
         std::ofstream out {tmpini};
@@ -2954,7 +2954,7 @@ TEST_CASE_METHOD(TApp, "IniMultipleDefaultPathAlternate", "[config]")
     int key {0};
     app.add_option("--flag,-f", key);
     auto *cfgOption = app.set_config("--config", "doesnotexist.ini")
-                          ->transform(CLI::FileOnDefaultPath("../other") | CLI::FileOnDefaultPath("../"));
+                          ->transform(cli::file_on_default_path_t("../other") | cli::file_on_default_path_t("../"));
 
     {
         std::ofstream out {tmpini};
@@ -3199,7 +3199,7 @@ TEST_CASE_METHOD(TApp, "IniFalseFlagsDefDisableOverrideError", "[config]")
     app.add_flag("!--four", four);
     app.add_flag("--five", five);
 
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 }
 
 TEST_CASE_METHOD(TApp, "IniFalseFlagsDefDisableOverrideSuccess", "[config]")
@@ -3264,7 +3264,7 @@ TEST_CASE_METHOD(TApp, "IniDisableFlagOverride", "[config]")
     CHECK(val == 2);
 
     args = {"--config", tmpini2};
-    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+    CHECK_THROWS_AS(run(), cli::argument_mismatch_t);
 
     args = {"--config", tmpini3};
     run();
@@ -3553,7 +3553,7 @@ TEST_CASE_METHOD(TApp, "TomlOutputVector", "[config]")
 
     std::vector<int> v;
     app.add_option("--vector", v);
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
     args = {"--vector", "1", "2", "3"};
 
     run();
@@ -3567,7 +3567,7 @@ TEST_CASE_METHOD(TApp, "TomlOutputTuple", "[config]")
 
     std::tuple<double, double, double, double> t;
     app.add_option("--tuple", t);
-    app.config_formatter(std::make_shared<CLI::ConfigTOML>());
+    app.config_formatter(std::make_shared<cli::config_toml_t>());
     args = {"--tuple", "1", "2", "3", "4"};
 
     run();
@@ -3581,8 +3581,8 @@ TEST_CASE_METHOD(TApp, "ConfigOutputVectorCustom", "[config]")
 
     std::vector<int> v;
     app.add_option("--vector", v);
-    auto V = std::make_shared<CLI::ConfigBase>();
-    V->arrayBounds('{', '}')->arrayDelimiter(';')->valueSeparator(':');
+    auto V = std::make_shared<cli::config_base_t>();
+    V->array_bounds('{', '}')->array_delimiter(';')->value_separator(':');
     app.config_formatter(V);
     args = {"--vector", "1", "2", "3"};
 
@@ -3594,7 +3594,7 @@ TEST_CASE_METHOD(TApp, "ConfigOutputVectorCustom", "[config]")
     str = V->to_config(&app, false, false, "");
     CHECK(str == "vector:{1; 2; 3}\n");
 
-    str = V->to_config(&app, CLI::ConfigOutputMode::AllDefaults, false, "");
+    str = V->to_config(&app, cli::config_output_mode_t::all_defaults, false, "");
     CHECK(str == "vector:{1; 2; 3}\n");
 }
 
@@ -3627,7 +3627,7 @@ TEST_CASE_METHOD(TApp, "TomlOutputSet", "[config]")
 {
 
     int v {0};
-    app.add_option("--simple", v)->check(CLI::IsMember({1, 2, 3}));
+    app.add_option("--simple", v)->check(cli::is_member_t({1, 2, 3}));
 
     args = {"--simple=2"};
 
@@ -3652,7 +3652,7 @@ TEST_CASE_METHOD(TApp, "TomlOutputDefault", "[config]")
     str = app.config_to_str(true);
     CHECK_THAT(str, Contains("simple=7"));
 
-    app.get_config_formatter_base()->commentDefaults();
+    app.get_config_formatter_base()->comment_defaults();
     str = app.config_to_str(true);
     CHECK_THAT(str, Contains("#simple=7"));
 }
@@ -3916,13 +3916,13 @@ TEST_CASE_METHOD(TApp, "ConfigWriteAllDefaults", "[config]")
     std::string create_path {"create-path"};
     create->add_option("--create-path", create_path, "A file which must not exist")
         ->capture_default_str()
-        ->check(CLI::NonexistentPath);
+        ->check(cli::nonexistent_path);
 
     auto *load = app.add_subcommand("load");
     std::string load_path(tmpexist);
     load->add_option("--load-path", load_path, "A file which must exist")
         ->capture_default_str()
-        ->check(CLI::ExistingFile);
+        ->check(cli::existing_file);
     // validators run during the config to string
     std::string configOut = app.config_to_str(true, false);
     CHECK_THAT(configOut, Contains("create.create-path"));
@@ -3947,16 +3947,16 @@ TEST_CASE_METHOD(TApp, "ConfigWriteDefaultActiveSubcommands", "[config]")
 
     auto *create = app.add_subcommand("create");
     std::string create_path {"create-path"};
-    create->add_option("--create-path", create_path)->capture_default_str()->check(CLI::NonexistentPath);
+    create->add_option("--create-path", create_path)->capture_default_str()->check(cli::nonexistent_path);
 
     auto *load = app.add_subcommand("load");
     std::string load_path {"load-path"};
-    load->add_option("--load-path", load_path)->capture_default_str()->check(CLI::ExistingPath);
+    load->add_option("--load-path", load_path)->capture_default_str()->check(cli::existing_path);
 
     args = {"create"};
     run();
 
-    std::string activeConfig = app.config_to_str(CLI::ConfigOutputMode::ActiveSubcommandDefaults, false);
+    std::string activeConfig = app.config_to_str(cli::config_output_mode_t::active_subcommand_defaults, false);
     CHECK_THAT(activeConfig, Contains("create.create-path"));
     CHECK_THAT(activeConfig, !Contains("load.load-path"));
 
@@ -3979,7 +3979,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSimple", "[config]")
 
     int v {0};
     app.add_option("--simple", v);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple=3"};
 
     run();
@@ -3994,7 +3994,7 @@ TEST_CASE_METHOD(TApp, "IniOutputNoConfigurable", "[config]")
     int v1 {0}, v2 {0};
     app.add_option("--simple", v1);
     app.add_option("--noconf", v2)->configurable(false);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple=3", "--noconf=2"};
 
     run();
@@ -4008,7 +4008,7 @@ TEST_CASE_METHOD(TApp, "IniOutputShortSingleDescription", "[config]")
     std::string flag = "some_flag";
     const std::string description = "Some short description.";
     app.add_flag("--" + flag, description);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4023,7 +4023,7 @@ TEST_CASE_METHOD(TApp, "IniOutputShortDoubleDescription", "[config]")
     const std::string description2 = "Second description.";
     app.add_flag("--" + flag1, description1);
     app.add_flag("--" + flag2, description2);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4039,7 +4039,7 @@ TEST_CASE_METHOD(TApp, "IniOutputGroups", "[config]")
     const std::string description2 = "Second description.";
     app.add_flag("--" + flag1, description1)->group("group1");
     app.add_flag("--" + flag2, description2)->group("group2");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4057,7 +4057,7 @@ TEST_CASE_METHOD(TApp, "IniOutputHiddenOptions", "[config]")
     app.add_flag("--" + flag1, description1)->group("group1");
     app.add_flag("--" + flag2, description2)->group("group2");
     app.add_option("--dval", val)->capture_default_str()->group("");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4076,7 +4076,7 @@ TEST_CASE_METHOD(TApp, "IniOutputAppMultiLineDescription", "[config]")
 {
     app.description("Some short app description.\n"
                     "That has multiple lines.");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
 
     // for descriptions to show up needs an option that was set
     app.add_option("--test");
@@ -4093,7 +4093,7 @@ TEST_CASE_METHOD(TApp, "IniOutputMultiLineDescription", "[config]")
     std::string flag = "some_flag";
     const std::string description = "Some short description.\nThat has lines.";
     app.add_flag("--" + flag, description);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4110,7 +4110,7 @@ TEST_CASE_METHOD(TApp, "IniOutputOptionGroupMultiLineDescription", "[config]")
     og->description("Option group description.\n"
                     "That has multiple lines.");
     og->add_flag("--" + flag, description);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4127,7 +4127,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubcommandMultiLineDescription", "[config]")
     subcom->description("Subcommand description.\n"
                         "That has multiple lines.");
     subcom->add_flag("--" + flag, description);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4146,7 +4146,7 @@ TEST_CASE_METHOD(TApp, "IniOutputOptionGroup", "[config]")
     app.add_flag("--" + flag2, description2)->group("group2");
     auto *og = app.add_option_group("group3", "g3 desc");
     og->add_option("--dval", val)->capture_default_str()->group("");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true, true);
@@ -4172,7 +4172,7 @@ TEST_CASE_METHOD(TApp, "IniOutputVector", "[config]")
     app.add_option("--vector", v);
 
     args = {"--vector", "1", "2", "3"};
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str();
@@ -4189,7 +4189,7 @@ TEST_CASE_METHOD(TApp, "IniOutputFlag", "[config]")
     app.add_flag("--something", q);
 
     args = {"--simple=3", "--onething", "--something", "--something"};
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str();
@@ -4208,10 +4208,10 @@ TEST_CASE_METHOD(TApp, "IniOutputSet", "[config]")
 {
 
     int v {0};
-    app.add_option("--simple", v)->check(CLI::IsMember({1, 2, 3}));
+    app.add_option("--simple", v)->check(cli::is_member_t({1, 2, 3}));
 
     args = {"--simple=2"};
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str();
@@ -4225,7 +4225,7 @@ TEST_CASE_METHOD(TApp, "IniOutputDefault", "[config]")
 
     int v {7};
     app.add_option("--simple", v)->capture_default_str();
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str();
@@ -4241,7 +4241,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubcom", "[config]")
     app.add_flag("--simple");
     auto *subcom = app.add_subcommand("other");
     subcom->add_flag("--newer");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "--newer"};
     run();
 
@@ -4256,8 +4256,8 @@ TEST_CASE_METHOD(TApp, "IniOutputSubcomCustomSep", "[config]")
     app.add_flag("--simple");
     auto *subcom = app.add_subcommand("other");
     subcom->add_flag("--newer");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
-    app.get_config_formatter_base()->parentSeparator(':');
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
+    app.get_config_formatter_base()->parent_separator(':');
     args = {"--simple", "other", "--newer"};
     run();
 
@@ -4272,7 +4272,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubcomConfigurable", "[config]")
     app.add_flag("--simple");
     auto *subcom = app.add_subcommand("other")->configurable();
     subcom->add_flag("--newer");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "--newer"};
     run();
 
@@ -4291,7 +4291,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcom", "[config]")
     subcom->add_flag("--newer");
     auto *subsubcom = subcom->add_subcommand("sub2");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "--newer", "sub2", "--newest"};
     run();
 
@@ -4309,7 +4309,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomWithDot", "[config]")
     subcom->add_flag("--newer");
     auto *subsubcom = subcom->add_subcommand("sub2.bb");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "--newer", "sub2.bb", "--newest"};
     run();
 
@@ -4327,8 +4327,8 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomCustomSep", "[config]")
     subcom->add_flag("--newer");
     auto *subsubcom = subcom->add_subcommand("sub2");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
-    app.get_config_formatter_base()->parentSeparator('|');
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
+    app.get_config_formatter_base()->parent_separator('|');
     args = {"--simple", "other", "--newer", "sub2", "--newest"};
     run();
 
@@ -4346,8 +4346,8 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomCustomSepWithInternalSep", "[config]")
     subcom->add_flag("--newer");
     auto *subsubcom = subcom->add_subcommand("sub2|BB");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
-    app.get_config_formatter_base()->parentSeparator('|');
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
+    app.get_config_formatter_base()->parent_separator('|');
     args = {"--simple", "other", "--newer", "sub2|BB", "--newest"};
     run();
 
@@ -4365,8 +4365,8 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomCustomSepWithInternalQuote", "[config]
     subcom->add_flag("--newer");
     auto *subsubcom = subcom->add_subcommand("sub2'BB");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
-    app.get_config_formatter_base()->parentSeparator('|');
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
+    app.get_config_formatter_base()->parent_separator('|');
     args = {"--simple", "other", "--newer", "sub2'BB", "--newest"};
     run();
 
@@ -4385,7 +4385,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomConfigurable", "[config]")
 
     auto *subsubcom = subcom->add_subcommand("sub2");
     subsubcom->add_flag("--newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "--newer", "sub2", "--newest"};
     run();
 
@@ -4411,7 +4411,7 @@ TEST_CASE_METHOD(TApp, "IniOutputSubsubcomConfigurableDeep", "[config]")
     subsubcom->add_flag("--still_newer");
     auto *s5com = sssscom->add_subcommand("sub-level3");
     s5com->add_flag("--absolute_newest");
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--simple", "other", "sub2", "sub-level2", "sub-level3", "--absolute_newest"};
     run();
 
@@ -4430,7 +4430,7 @@ TEST_CASE_METHOD(TApp, "IniOutputQuoted", "[config]")
 
     std::string val2;
     app.add_option("--val2", val2);
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     args = {"--val1", "I am a string", "--val2", R"(I am a "confusing" string)"};
 
     run();
@@ -4451,7 +4451,7 @@ TEST_CASE_METHOD(TApp, "DefaultsIniOutputQuoted", "[config]")
 
     std::string val2 {R"(I am a "confusing" string)"};
     app.add_option("--val2", val2)->capture_default_str();
-    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.config_formatter(std::make_shared<cli::config_ini_t>());
     run();
 
     std::string str = app.config_to_str(true);
@@ -4500,7 +4500,7 @@ TEST_CASE_METHOD(TApp, "CrashTest", "[config]")
     args = {"spdlog", "--level=off"};
 
     app.configurable()->allow_config_extras(false);
-    app.set_config("--conf")->check(CLI::ExistingFile);
+    app.set_config("--conf")->check(cli::existing_file);
 
     std::string level;
 

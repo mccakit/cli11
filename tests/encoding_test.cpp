@@ -42,7 +42,7 @@ static const std::wstring hello_wstr(reinterpret_cast<const wchar_t *>(hello_utf
 
 TEST_CASE("Encoding: Widen", "[unicode]")
 {
-    using CLI::widen;
+    using cli::widen;
     CHECK(abcd_wstr == widen(abcd_str));
     CHECK(egypt_wstr == widen(egypt_str));
     CHECK(hello_wstr == widen(hello_str));
@@ -53,7 +53,7 @@ TEST_CASE("Encoding: Widen", "[unicode]")
 
 TEST_CASE("Encoding: Narrow", "[unicode]")
 {
-    using CLI::narrow;
+    using cli::narrow;
     CHECK(abcd_str == narrow(abcd_wstr));
     CHECK(egypt_str == narrow(egypt_wstr));
     CHECK(hello_str == narrow(hello_wstr));
@@ -66,9 +66,9 @@ TEST_CASE("Encoding: to_path roundtrip", "[unicode]")
 {
     using std::filesystem::path;
 #ifdef _WIN32
-    std::wstring native_str = CLI::widen(hello_str);
+    std::wstring native_str = cli::widen(hello_str);
 #else
     std::string native_str = hello_str;
 #endif
-    CHECK(CLI::to_path(hello_str).native() == native_str);
+    CHECK(cli::to_path(hello_str).native() == native_str);
 }

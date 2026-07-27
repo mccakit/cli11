@@ -1,66 +1,83 @@
-// Copyright (c) 2017-2026, University of Cincinnati, developed by Henry Schreiner
-// under NSF AWARD 1414736 and by the respective contributors.
-// All rights reserved.
-//
-// SPDX-License-Identifier: BSD-3-Clause
+/// @file
+/// @brief Declarations for the help formatters.
+///
+/// @ref cli::formatter_base_t holds the layout settings and the labels;
+/// @ref cli::formatter_t declares the overridable pieces that assemble a help
+/// page. The bodies live in the `formatter` partition, which is separate so that
+/// `app_t` can hold a formatter without a circular dependency.
+///
+/// To customise help output, derive from @ref cli::formatter_t and override the
+/// pieces you care about, or wrap a lambda in @ref cli::formatter_lambda_t.
 
 export module cli11:formatter_fwd;
 
 import std;
 import :string_tools;
 
-export namespace CLI
+export namespace cli
 {
 
-    class Option;
-    class App;
+    class option_t;
+    class app_t;
 
-    /// This enum signifies the type of help requested
-    enum class AppFormatMode : std::uint8_t
+    /// @brief How much detail a help request wants.
+    enum class app_format_mode_t : std::uint8_t
     {
-        Normal, ///< The normal, detailed help
-        All,    ///< A fully expanded help
-        Sub,    ///< Used when printed as part of expanded subcommand
+        normal, ///< The normal, detailed help.
+        all,    ///< A fully expanded help.
+        sub,    ///< Used when printed as part of an expanded subcommand.
     };
 
-    /// This is the minimum requirements to run a formatter.
-    class FormatterBase
+    /// @brief Layout settings and labels shared by every formatter.
+    class formatter_base_t
     {
         protected:
             /// @name Options
             ///@{
 
-            /// The width of the left column (options/flags/subcommands)
+            /// @brief The width of the left column (options, flags, subcommands).
             std::size_t column_width_ {30};
 
-            /// The alignment ratio for long options within the left column
+            /// @brief The alignment ratio for long options within the left column.
             float long_option_alignment_ratio_ {1 / 3.f};
 
-            /// The width of the right column (description of options/flags/subcommands)
+            /// @brief The width of the right column (descriptions).
             std::size_t right_column_width_ {65};
 
-            /// The width of the description paragraph at the top of the help
+            /// @brief The width of the description paragraph at the top of the help.
             std::size_t description_paragraph_width_ {80};
 
-            /// The width of the footer paragraph
+            /// @brief The width of the footer paragraph.
             std::size_t footer_paragraph_width_ {80};
 
-            /// Options for controlling formatting of the footer and descriptions
+            /// @brief Whether the description paragraph is reflowed.
             bool enable_description_formatting_ {true};
+
+            /// @brief Whether the footer paragraph is reflowed.
             bool enable_footer_formatting_ {true};
 
-            /// Options for controlling the formatting of options
+            /// @brief Whether option default values are printed.
             bool enable_option_defaults_ {true};
+
+            /// @brief Whether option type names are printed.
             bool enable_option_type_names_ {true};
+
+            /// @brief Whether default flag values are printed.
             bool enable_default_flag_values_ {true};
 
-            /// @brief The labels used for the required help printing (can be changed by user)
-            std::map<std::string, std::string> labels_ {};
+            /// @brief User overrides for the section labels.
+            ///
+            /// Uses a transparent comparator so lookups accept `std::string_view`
+            /// without allocating.
+            std::map<std::string, std::string, std::less<>> labels_ {};
 
-            /// The default user labels when no overrides are set
-            static std::string default_label(const std::string &key)
+            /// @brief The label used when no override is set.
+            ///
+            /// @param key The label to resolve.
+            /// @return @p key unchanged.
+            [[nodiscard]] static auto default_label(std::string_view key) -> std::string
             {
-                return key;
+                return std::string {key};
             }
 
             ///@}
@@ -68,128 +85,209 @@ export namespace CLI
             ///@{
 
         public:
-            FormatterBase() = default;
-            FormatterBase(const FormatterBase &) = default;
-            FormatterBase(FormatterBase &&) = default;
-            FormatterBase &operator=(const FormatterBase &) = default;
-            FormatterBase &operator=(FormatterBase &&) = default;
+            formatter_base_t() = default;
+            formatter_base_t(const formatter_base_t &) = default;
+            formatter_base_t(formatter_base_t &&) = default;
+            auto operator=(const formatter_base_t &) -> formatter_base_t & = default;
+            auto operator=(formatter_base_t &&) -> formatter_base_t & = default;
 
-            virtual ~FormatterBase() noexcept = default;
+            virtual ~formatter_base_t() noexcept = default;
 
-            /// This is the main method that puts the help together
-            virtual std::string make_help(const App *, std::string, AppFormatMode) const = 0;
+            /// @brief Assembles a complete help page.
+            ///
+            /// @param app The application to describe.
+            /// @param name The name to present the application under.
+            /// @param mode How much detail to include.
+            /// @return The rendered help page.
+            [[nodiscard]] virtual auto make_help(const app_t *app, std::string name, app_format_mode_t mode) const
+                -> std::string = 0;
 
             ///@}
             /// @name Setters
             ///@{
 
-            void label(std::string key, std::string val)
+            /// @brief Overrides a section label.
+            ///
+            /// @param key The label to override.
+            /// @param val The replacement text.
+            auto label(std::string key, std::string val) -> void
             {
-                labels_[key] = std::move(val);
+                labels_.insert_or_assign(std::move(key), std::move(val));
             }
 
-            void column_width(std::size_t val)
+            /// @brief Sets the width of the left column.
+            ///
+            /// @param val The new width, in characters.
+            auto column_width(std::size_t val) -> void
             {
                 column_width_ = val;
             }
 
-            void long_option_alignment_ratio(float ratio)
+            /// @brief Sets the alignment ratio for long options in the left column.
+            ///
+            /// Values outside `[0, 1]` are folded back into range.
+            ///
+            /// @param ratio The new ratio.
+            auto long_option_alignment_ratio(float ratio) -> void
             {
                 long_option_alignment_ratio_ = (ratio >= 0.0f) ? ((ratio <= 1.0f) ? ratio : 1.0f / ratio)
                                                                : ((ratio < -1.0f) ? 1.0f / (-ratio) : -ratio);
             }
 
-            void right_column_width(std::size_t val)
+            /// @brief Sets the width of the right column.
+            ///
+            /// @param val The new width, in characters.
+            auto right_column_width(std::size_t val) -> void
             {
                 right_column_width_ = val;
             }
 
-            void description_paragraph_width(std::size_t val)
+            /// @brief Sets the width of the description paragraph.
+            ///
+            /// @param val The new width, in characters.
+            auto description_paragraph_width(std::size_t val) -> void
             {
                 description_paragraph_width_ = val;
             }
 
-            void footer_paragraph_width(std::size_t val)
+            /// @brief Sets the width of the footer paragraph.
+            ///
+            /// @param val The new width, in characters.
+            auto footer_paragraph_width(std::size_t val) -> void
             {
                 footer_paragraph_width_ = val;
             }
-            void enable_description_formatting(bool value = true)
+
+            /// @brief Enables or disables reflowing of the description paragraph.
+            ///
+            /// @param value Whether to reflow.
+            auto enable_description_formatting(bool value = true) -> void
             {
                 enable_description_formatting_ = value;
             }
-            void enable_footer_formatting(bool value = true)
+
+            /// @brief Enables or disables reflowing of the footer paragraph.
+            ///
+            /// @param value Whether to reflow.
+            auto enable_footer_formatting(bool value = true) -> void
             {
                 enable_footer_formatting_ = value;
             }
 
-            void enable_option_defaults(bool value = true)
+            /// @brief Enables or disables printing of option default values.
+            ///
+            /// @param value Whether to print defaults.
+            auto enable_option_defaults(bool value = true) -> void
             {
                 enable_option_defaults_ = value;
             }
-            void enable_option_type_names(bool value = true)
+
+            /// @brief Enables or disables printing of option type names.
+            ///
+            /// @param value Whether to print type names.
+            auto enable_option_type_names(bool value = true) -> void
             {
                 enable_option_type_names_ = value;
             }
-            void enable_default_flag_values(bool value = true)
+
+            /// @brief Enables or disables printing of default flag values.
+            ///
+            /// @param value Whether to print default flag values.
+            auto enable_default_flag_values(bool value = true) -> void
             {
                 enable_default_flag_values_ = value;
             }
+
             ///@}
             /// @name Getters
             ///@{
 
-            [[nodiscard]] std::string get_label(std::string key) const
+            /// @brief Resolves a section label, applying any override.
+            ///
+            /// @param key The label to resolve.
+            /// @return The override if one is set, otherwise @p key unchanged.
+            [[nodiscard]] auto get_label(std::string_view key) const -> std::string
             {
-                auto it = labels_.find(key);
+                const auto it = labels_.find(key);
                 return it != labels_.end() ? it->second : default_label(key);
             }
 
-            [[nodiscard]] std::size_t get_column_width() const
+            /// @brief Returns the width of the left column.
+            ///
+            /// @return The width, in characters.
+            [[nodiscard]] auto get_column_width() const -> std::size_t
             {
                 return column_width_;
             }
 
-            [[nodiscard]] std::size_t get_right_column_width() const
+            /// @brief Returns the width of the right column.
+            ///
+            /// @return The width, in characters.
+            [[nodiscard]] auto get_right_column_width() const -> std::size_t
             {
                 return right_column_width_;
             }
 
-            [[nodiscard]] std::size_t get_description_paragraph_width() const
+            /// @brief Returns the width of the description paragraph.
+            ///
+            /// @return The width, in characters.
+            [[nodiscard]] auto get_description_paragraph_width() const -> std::size_t
             {
                 return description_paragraph_width_;
             }
 
-            [[nodiscard]] std::size_t get_footer_paragraph_width() const
+            /// @brief Returns the width of the footer paragraph.
+            ///
+            /// @return The width, in characters.
+            [[nodiscard]] auto get_footer_paragraph_width() const -> std::size_t
             {
                 return footer_paragraph_width_;
             }
 
-            [[nodiscard]] float get_long_option_alignment_ratio() const
+            /// @brief Returns the alignment ratio for long options.
+            ///
+            /// @return The ratio.
+            [[nodiscard]] auto get_long_option_alignment_ratio() const -> float
             {
                 return long_option_alignment_ratio_;
             }
 
-            [[nodiscard]] bool is_description_paragraph_formatting_enabled() const
+            /// @brief Reports whether the description paragraph is reflowed.
+            ///
+            /// @return `true` if reflowing is enabled.
+            [[nodiscard]] auto is_description_paragraph_formatting_enabled() const -> bool
             {
                 return enable_description_formatting_;
             }
 
-            [[nodiscard]] bool is_footer_paragraph_formatting_enabled() const
+            /// @brief Reports whether the footer paragraph is reflowed.
+            ///
+            /// @return `true` if reflowing is enabled.
+            [[nodiscard]] auto is_footer_paragraph_formatting_enabled() const -> bool
             {
                 return enable_footer_formatting_;
             }
 
-            [[nodiscard]] bool is_option_defaults_enabled() const
+            /// @brief Reports whether option default values are printed.
+            ///
+            /// @return `true` if defaults are printed.
+            [[nodiscard]] auto is_option_defaults_enabled() const -> bool
             {
                 return enable_option_defaults_;
             }
 
-            [[nodiscard]] bool is_option_type_names_enabled() const
+            /// @brief Reports whether option type names are printed.
+            ///
+            /// @return `true` if type names are printed.
+            [[nodiscard]] auto is_option_type_names_enabled() const -> bool
             {
                 return enable_option_type_names_;
             }
 
-            [[nodiscard]] bool is_default_flag_values_enabled() const
+            /// @brief Reports whether default flag values are printed.
+            ///
+            /// @return `true` if default flag values are printed.
+            [[nodiscard]] auto is_default_flag_values_enabled() const -> bool
             {
                 return enable_default_flag_values_;
             }
@@ -197,76 +295,166 @@ export namespace CLI
             ///@}
     };
 
-    /// This is a special override class for lambda functions
-    class FormatterLambda final : public FormatterBase
+    /// @brief A formatter that delegates the whole help page to a callable.
+    class formatter_lambda_t final : public formatter_base_t
     {
-            using funct_t = std::function<std::string(const App *, std::string, AppFormatMode)>;
+            /// @brief The callable that renders the help page.
+            ///
+            /// @note This wants to be `std::copyable_function<... const>`, which fixes
+            /// the const-correctness of the call operator, but libc++ does not yet
+            /// implement it.
+            using funct_t = std::function<std::string(const app_t *, std::string, app_format_mode_t)>;
 
+            /// @brief The wrapped callable.
             funct_t lambda_;
 
         public:
-            explicit FormatterLambda(funct_t funct) : lambda_(std::move(funct))
+            /// @brief Wraps a callable as a formatter.
+            ///
+            /// @param funct The callable that renders the help page.
+            explicit formatter_lambda_t(funct_t funct) : lambda_(std::move(funct))
             {
             }
 
-            ~FormatterLambda() noexcept override = default;
+            ~formatter_lambda_t() noexcept override = default;
 
-            std::string make_help(const App *app, std::string name, AppFormatMode mode) const override
+            /// @brief Renders the help page by invoking the wrapped callable.
+            ///
+            /// @param app The application to describe.
+            /// @param name The name to present the application under.
+            /// @param mode How much detail to include.
+            /// @return The rendered help page.
+            [[nodiscard]] auto make_help(const app_t *app, std::string name, app_format_mode_t mode) const
+                -> std::string override
             {
                 return lambda_(app, std::move(name), mode);
             }
     };
 
-    /// This is the default Formatter for CLI11.
-    class Formatter : public FormatterBase
+    /// @brief The default help formatter.
+    ///
+    /// Each piece of the help page is a separate virtual, so a derived formatter
+    /// can replace one section without reimplementing the rest.
+    class formatter_t : public formatter_base_t
     {
         public:
-            Formatter() = default;
-            Formatter(const Formatter &) = default;
-            Formatter(Formatter &&) = default;
-            Formatter &operator=(const Formatter &) = default;
-            Formatter &operator=(Formatter &&) = default;
+            formatter_t() = default;
+            formatter_t(const formatter_t &) = default;
+            formatter_t(formatter_t &&) = default;
+            auto operator=(const formatter_t &) -> formatter_t & = default;
+            auto operator=(formatter_t &&) -> formatter_t & = default;
 
             /// @name Overridables
             ///@{
 
-            [[nodiscard]] virtual std::string make_group(std::string group,
-                                                         bool is_positional,
-                                                         std::vector<const Option *> opts) const;
+            /// @brief Renders one named group of options.
+            ///
+            /// @param group The group name.
+            /// @param is_positional Whether the group holds positionals.
+            /// @param opts The options in the group.
+            /// @return The rendered group.
+            [[nodiscard]] virtual auto make_group(std::string group,
+                                                  bool is_positional,
+                                                  std::vector<const option_t *> opts) const -> std::string;
 
-            virtual std::string make_positionals(const App *app) const;
+            /// @brief Renders the positional arguments section.
+            ///
+            /// @param app The application to describe.
+            /// @return The rendered section.
+            [[nodiscard]] virtual auto make_positionals(const app_t *app) const -> std::string;
 
-            std::string make_groups(const App *app, AppFormatMode mode) const;
+            /// @brief Renders every option group.
+            ///
+            /// @param app The application to describe.
+            /// @param mode How much detail to include.
+            /// @return The rendered sections.
+            [[nodiscard]] auto make_groups(const app_t *app, app_format_mode_t mode) const -> std::string;
 
-            virtual std::string make_subcommands(const App *app, AppFormatMode mode) const;
+            /// @brief Renders the subcommand list.
+            ///
+            /// @param app The application to describe.
+            /// @param mode How much detail to include.
+            /// @return The rendered section.
+            [[nodiscard]] virtual auto make_subcommands(const app_t *app, app_format_mode_t mode) const -> std::string;
 
-            virtual std::string make_subcommand(const App *sub) const;
+            /// @brief Renders a single subcommand entry.
+            ///
+            /// @param sub The subcommand to describe.
+            /// @return The rendered entry.
+            [[nodiscard]] virtual auto make_subcommand(const app_t *sub) const -> std::string;
 
-            virtual std::string make_expanded(const App *sub, AppFormatMode mode) const;
+            /// @brief Renders a subcommand expanded in full.
+            ///
+            /// @param sub The subcommand to describe.
+            /// @param mode How much detail to include.
+            /// @return The rendered entry.
+            [[nodiscard]] virtual auto make_expanded(const app_t *sub, app_format_mode_t mode) const -> std::string;
 
-            virtual std::string make_footer(const App *app) const;
+            /// @brief Renders the footer.
+            ///
+            /// @param app The application to describe.
+            /// @return The rendered footer.
+            [[nodiscard]] virtual auto make_footer(const app_t *app) const -> std::string;
 
-            virtual std::string make_description(const App *app) const;
+            /// @brief Renders the description paragraph.
+            ///
+            /// @param app The application to describe.
+            /// @return The rendered description.
+            [[nodiscard]] virtual auto make_description(const app_t *app) const -> std::string;
 
-            virtual std::string make_usage(const App *app, std::string name) const;
+            /// @brief Renders the usage line.
+            ///
+            /// @param app The application to describe.
+            /// @param name The name to present the application under.
+            /// @return The rendered usage line.
+            [[nodiscard]] virtual auto make_usage(const app_t *app, std::string name) const -> std::string;
 
-            std::string make_help(const App *app, std::string name, AppFormatMode mode) const override;
+            /// @brief Assembles the complete help page.
+            ///
+            /// @param app The application to describe.
+            /// @param name The name to present the application under.
+            /// @param mode How much detail to include.
+            /// @return The rendered help page.
+            [[nodiscard]] auto make_help(const app_t *app, std::string name, app_format_mode_t mode) const
+                -> std::string override;
 
             ///@}
             /// @name Options
             ///@{
 
-            virtual std::string make_option(const Option *, bool) const;
+            /// @brief Renders a single option entry.
+            ///
+            /// @param opt The option to describe.
+            /// @param is_positional Whether the option is a positional.
+            /// @return The rendered entry.
+            [[nodiscard]] virtual auto make_option(const option_t *opt, bool is_positional) const -> std::string;
 
-            virtual std::string make_option_name(const Option *, bool) const;
+            /// @brief Renders the name column of an option entry.
+            ///
+            /// @param opt The option to describe.
+            /// @param is_positional Whether the option is a positional.
+            /// @return The rendered name column.
+            [[nodiscard]] virtual auto make_option_name(const option_t *opt, bool is_positional) const -> std::string;
 
-            virtual std::string make_option_opts(const Option *) const;
+            /// @brief Renders the qualifiers that follow an option's name.
+            ///
+            /// @param opt The option to describe.
+            /// @return The rendered qualifiers.
+            [[nodiscard]] virtual auto make_option_opts(const option_t *opt) const -> std::string;
 
-            virtual std::string make_option_desc(const Option *) const;
+            /// @brief Renders an option's description column.
+            ///
+            /// @param opt The option to describe.
+            /// @return The rendered description.
+            [[nodiscard]] virtual auto make_option_desc(const option_t *opt) const -> std::string;
 
-            virtual std::string make_option_usage(const Option *opt) const;
+            /// @brief Renders how an option appears in the usage line.
+            ///
+            /// @param opt The option to describe.
+            /// @return The rendered usage fragment.
+            [[nodiscard]] virtual auto make_option_usage(const option_t *opt) const -> std::string;
 
             ///@}
     };
 
-} // namespace CLI
+} // namespace cli

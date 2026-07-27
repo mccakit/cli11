@@ -10,7 +10,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("data output specification");
+    cli::app_t app("data output specification");
     app.set_help_all_flag("--help-all", "Expand all help");
 
     auto *format = app.add_option_group("output_format", "formatting type for output");
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

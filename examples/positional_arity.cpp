@@ -10,7 +10,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("test for positional arity");
+    cli::app_t app("test for positional arity");
 
     auto *numbers = app.add_option_group("numbers", "specify key numbers");
     auto *files = app.add_option_group("files", "specify files");
@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

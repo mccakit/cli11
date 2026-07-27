@@ -10,8 +10,8 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("Prefix command app");
-    app.prefix_command(CLI::PrefixCommandMode::On);
+    cli::app_t app("Prefix command app");
+    app.prefix_command(cli::prefix_command_mode_t::on);
 
     std::vector<int> vals;
     app.add_option("--vals,-v", vals)->expected(-1);
@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

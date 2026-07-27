@@ -60,13 +60,13 @@ std::pair<std::string, std::size_t> findClosestMatch(const std::string &input,
     return {closest, minDistance};
 }
 
-void addSubcommandCloseMatchDetection(CLI::App *app, std::size_t minDistance = 3)
+void addSubcommandCloseMatchDetection(cli::app_t *app, std::size_t minDistance = 3)
 {
     // if extras are not allowed then there will be no remaining
     app->allow_extras(true);
     // generate a list of subcommand names
     auto subs = app->get_subcommands(nullptr);
-    CLI::results_t list;
+    cli::results_t list;
     for (const auto *sub : subs)
     {
         if (!sub->get_name().empty())
@@ -102,7 +102,7 @@ int main(int argc, const char *argv[])
 {
 
     int value {0};
-    CLI::App app {"App for testing prefix matching and close string matching"};
+    cli::app_t app {"App for testing prefix matching and close string matching"};
     // turn on prefix matching
     app.allow_subcommand_prefix_matching();
     app.add_option("-v", value, "value");
@@ -117,7 +117,7 @@ int main(int argc, const char *argv[])
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

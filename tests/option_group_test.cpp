@@ -27,13 +27,13 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroup", "[optiongroup]")
 
 TEST_CASE_METHOD(TApp, "OptionGroupInvalidNames", "[optiongroup]")
 {
-    CHECK_THROWS_AS(app.add_option_group("clusters\ncluster2", "description"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_option_group("clusters\ncluster2", "description"), cli::incorrect_construction_t);
 
     std::string groupName("group1");
     groupName += '\0';
     groupName.append("group2");
 
-    CHECK_THROWS_AS(app.add_option_group(groupName), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_option_group(groupName), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "BasicOptionGroupExact", "[optiongroup]")
@@ -51,10 +51,10 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupExact", "[optiongroup]")
     CHECK(5 == res);
 
     args = {"--test1", "5", "--test2", "4"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[Exactly 1");
@@ -72,7 +72,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupExactTooMany", "[optiongroup]")
     app.add_option("--option", val2);
     ogroup->require_option(10);
     args = {"--test1", "5"};
-    CHECK_THROWS_AS(run(), CLI::InvalidError);
+    CHECK_THROWS_AS(run(), cli::invalid_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMax", "[optiongroup]")
@@ -90,10 +90,10 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMax", "[optiongroup]")
     CHECK(5 == res);
 
     args = {"--test1", "5", "--test2", "4"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[Exactly 1");
@@ -119,10 +119,10 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMaxDifferent", "[optiongroup]")
     CHECK(2u == app.count_all());
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[Between 1 and 2");
@@ -142,7 +142,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMaxDifferentReversed", "[optiongroup]
     CHECK(2u == ogroup->get_require_option_min());
     CHECK(1u == ogroup->get_require_option_max());
     args = {"--test1", "5"};
-    CHECK_THROWS_AS(run(), CLI::InvalidError);
+    CHECK_THROWS_AS(run(), cli::invalid_error_t);
     ogroup->require_option(1, 2);
     CHECK_NOTHROW(run());
     CHECK(5 == res);
@@ -152,10 +152,10 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMaxDifferentReversed", "[optiongroup]
     CHECK_NOTHROW(run());
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[Between 1 and 2");
@@ -180,7 +180,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMax", "[optiongroup]")
     CHECK_NOTHROW(run());
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[At most 2");
@@ -205,7 +205,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMax1", "[optiongroup]")
     CHECK_NOTHROW(run());
 
     args = {"--test1", "5", "--test2", "4"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     std::string help = ogroup->help();
     auto exactloc = help.find("[At most 1");
@@ -224,7 +224,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMin", "[optiongroup]")
     ogroup->require_option();
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
     CHECK_NOTHROW(run());
@@ -246,14 +246,14 @@ TEST_CASE_METHOD(TApp, "integratedOptionGroup", "[optiongroup]")
     ogroup->require_option();
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
     CHECK_NOTHROW(run());
 
     auto options = app.get_options();
     CHECK(options.size() == 5);
-    const CLI::App *capp = &app;
+    const cli::app_t *capp = &app;
     auto coptions = capp->get_options();
     CHECK(coptions.size() == 5);
     std::string help = app.help();
@@ -273,10 +273,10 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupExact2", "[optiongroup]")
     ogroup->require_option(2);
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test3=5"};
     CHECK_NOTHROW(run());
@@ -298,7 +298,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMin2", "[optiongroup]")
     ogroup->require_option(2, 0);
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
     CHECK_NOTHROW(run());
@@ -325,7 +325,7 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMoved", "[optiongroup]")
     ogroup->add_option(opt3);
 
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
     CHECK_NOTHROW(run());
@@ -352,9 +352,9 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupMinMovedAsGroup", "[optiongroup]")
     ogroup->require_option();
     ogroup->add_options(opt1, opt2, opt3);
 
-    CHECK_THROWS_AS(ogroup->add_options(opt1), CLI::OptionNotFound);
+    CHECK_THROWS_AS(ogroup->add_options(opt1), cli::option_not_found_t);
     args = {"--option", "9"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--test1", "5", "--test2", "4", "--test3=5"};
     CHECK_NOTHROW(run());
@@ -377,21 +377,21 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupAddFailures", "[optiongroup]")
     app.add_option("--option", val2);
 
     auto *ogroup = app.add_option_group("clusters");
-    CHECK_THROWS_AS(ogroup->add_options(app.get_config_ptr()), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(ogroup->add_options(app.get_help_ptr()), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(ogroup->add_options(app.get_config_ptr()), cli::option_already_added_t);
+    CHECK_THROWS_AS(ogroup->add_options(app.get_help_ptr()), cli::option_already_added_t);
 
     auto *sub = app.add_subcommand("sub", "subcommand");
     auto *opt2 = sub->add_option("--option2", val2);
 
-    CHECK_THROWS_AS(ogroup->add_option(opt2), CLI::OptionNotFound);
+    CHECK_THROWS_AS(ogroup->add_option(opt2), cli::option_not_found_t);
 
-    CHECK_THROWS_AS(ogroup->add_options(nullptr), CLI::OptionNotFound);
+    CHECK_THROWS_AS(ogroup->add_options(nullptr), cli::option_not_found_t);
 
     ogroup->add_option(opt1);
 
     auto *opt3 = app.add_option("--test1", res);
 
-    CHECK_THROWS_AS(ogroup->add_option(opt3), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(ogroup->add_option(opt3), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "BasicOptionGroupScrewedUpMove", "[optiongroup]")
@@ -406,23 +406,23 @@ TEST_CASE_METHOD(TApp, "BasicOptionGroupScrewedUpMove", "[optiongroup]")
     auto *ogroup = app.add_option_group("clusters");
     ogroup->require_option();
     auto *ogroup2 = ogroup->add_option_group("clusters2");
-    CHECK_THROWS_AS(ogroup2->add_options(opt1, opt2), CLI::OptionNotFound);
+    CHECK_THROWS_AS(ogroup2->add_options(opt1, opt2), cli::option_not_found_t);
 
-    CLI::Option_group EmptyGroup("description", "new group", nullptr);
+    cli::option_group_t EmptyGroup("description", "new group", nullptr);
 
-    CHECK_THROWS_AS(EmptyGroup.add_option(opt2), CLI::OptionNotFound);
-    CHECK_THROWS_AS(app._move_option(opt2, ogroup2), CLI::OptionNotFound);
+    CHECK_THROWS_AS(EmptyGroup.add_option(opt2), cli::option_not_found_t);
+    CHECK_THROWS_AS(app._move_option(opt2, ogroup2), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "InvalidOptions", "[optiongroup]")
 {
     auto *ogroup = app.add_option_group("clusters");
-    CLI::Option *opt = nullptr;
-    CHECK_THROWS_AS(ogroup->excludes(opt), CLI::OptionNotFound);
-    CLI::App *app_p = nullptr;
-    CHECK_THROWS_AS(ogroup->excludes(app_p), CLI::OptionNotFound);
-    CHECK_THROWS_AS(ogroup->excludes(ogroup), CLI::OptionNotFound);
-    CHECK_THROWS_AS(ogroup->add_option(opt), CLI::OptionNotFound);
+    cli::option_t *opt = nullptr;
+    CHECK_THROWS_AS(ogroup->excludes(opt), cli::option_not_found_t);
+    cli::app_t *app_p = nullptr;
+    CHECK_THROWS_AS(ogroup->excludes(app_p), cli::option_not_found_t);
+    CHECK_THROWS_AS(ogroup->excludes(ogroup), cli::option_not_found_t);
+    CHECK_THROWS_AS(ogroup->add_option(opt), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "OptionGroupInheritedOptionDefaults", "[optiongroup]")
@@ -441,10 +441,10 @@ TEST_CASE_METHOD(TApp, "OptionGroupInheritedOptionDefaults", "[optiongroup]")
 struct ManyGroups : public TApp
 {
 
-        CLI::Option_group *main {nullptr};
-        CLI::Option_group *g1 {nullptr};
-        CLI::Option_group *g2 {nullptr};
-        CLI::Option_group *g3 {nullptr};
+        cli::option_group_t *main {nullptr};
+        cli::option_group_t *g1 {nullptr};
+        cli::option_group_t *g2 {nullptr};
+        cli::option_group_t *g3 {nullptr};
         std::string name1 {};
         std::string name2 {};
         std::string name3 {};
@@ -495,14 +495,14 @@ TEST_CASE_METHOD(ManyGroups, "SingleGroup", "[optiongroup]")
 
     args = {"--name1", "test", "--val2", "tval"};
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManyGroups, "getGroup", "[optiongroup]")
 {
     auto *mn = app.get_option_group("main");
     CHECK(mn == main);
-    CHECK_THROWS_AS(app.get_option_group("notfound"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_option_group("notfound"), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(ManyGroups, "ExcludesGroup", "[optiongroup]")
@@ -516,7 +516,7 @@ TEST_CASE_METHOD(ManyGroups, "ExcludesGroup", "[optiongroup]")
 
     args = {"--name1", "test", "--name2", "test2"};
 
-    CHECK_THROWS_AS(run(), CLI::ExcludesError);
+    CHECK_THROWS_AS(run(), cli::excludes_error_t);
 
     CHECK(g1->remove_excludes(g2));
     CHECK_NOTHROW(run());
@@ -531,7 +531,7 @@ TEST_CASE_METHOD(ManyGroups, "NeedsGroup", "[optiongroup]")
     g1->needs(g2);
     g1->needs(g3);
     args = {"--name1", "test"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
     // other groups should run fine
     args = {"--name2", "test2"};
 
@@ -545,7 +545,7 @@ TEST_CASE_METHOD(ManyGroups, "NeedsGroup", "[optiongroup]")
 // test adding an option group with existing subcommands to an app
 TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[optiongroup]")
 {
-    auto sshared = std::make_shared<CLI::Option_group>("documenting the subcommand", "sub1g", nullptr);
+    auto sshared = std::make_shared<cli::option_group_t>("documenting the subcommand", "sub1g", nullptr);
     auto *s1 = sshared->add_subcommand("sub1");
     auto *o1 = sshared->add_option_group("opt1");
     o1->add_subcommand("sub3")->alias("sub4");
@@ -558,7 +558,7 @@ TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[optiongroup]")
         // this should throw the next line should never be reached
         CHECK(!true);
     }
-    catch (const CLI::OptionAlreadyAdded &oaa)
+    catch (const cli::option_already_added_t &oaa)
     {
         CHECK_THAT(oaa.what(), Contains("sub1"));
     }
@@ -572,7 +572,7 @@ TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[optiongroup]")
         // this should throw the next line should never be reached
         CHECK(!true);
     }
-    catch (const CLI::OptionAlreadyAdded &oaa)
+    catch (const cli::option_already_added_t &oaa)
     {
         CHECK_THAT(oaa.what(), Contains("sub3"));
     }
@@ -583,7 +583,7 @@ TEST_CASE_METHOD(ManyGroups, "SingleGroupError", "[optiongroup]")
     // only 1 group can be used
     main->require_option(1);
     args = {"--name1", "test", "--name2", "test3"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManyGroups, "AtMostOneGroup", "[optiongroup]")
@@ -591,7 +591,7 @@ TEST_CASE_METHOD(ManyGroups, "AtMostOneGroup", "[optiongroup]")
     // only 1 group can be used
     main->require_option(0, 1);
     args = {"--name1", "test", "--name2", "test3"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {};
     CHECK_NOTHROW(run());
@@ -605,7 +605,7 @@ TEST_CASE_METHOD(ManyGroups, "AtLeastTwoGroups", "[optiongroup]")
     run();
 
     args = {"--name1", "test"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManyGroups, "BetweenOneAndTwoGroups", "[optiongroup]")
@@ -619,10 +619,10 @@ TEST_CASE_METHOD(ManyGroups, "BetweenOneAndTwoGroups", "[optiongroup]")
     run();
 
     args = {};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"--name1", "test", "--name2", "test3", "--name3=test3"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManyGroups, "RequiredFirst", "[optiongroup]")
@@ -641,7 +641,7 @@ TEST_CASE_METHOD(ManyGroups, "RequiredFirst", "[optiongroup]")
     {
         run();
     }
-    catch (const CLI::RequiredError &re)
+    catch (const cli::required_error_t &re)
     {
         CHECK_THAT(re.what(), Contains("g1"));
     }
@@ -663,7 +663,7 @@ TEST_CASE_METHOD(ManyGroups, "DisableFirst", "[optiongroup]")
     run();
 
     args = {"--name1", "test", "--name2", "test3"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     g1->disabled(false);
     args = {"--name1", "test", "--name2", "test3", "--name3=test3"};
     CHECK_NOTHROW(run());
@@ -740,7 +740,7 @@ TEST_CASE_METHOD(ManyGroups, "ExtrasFallDown", "[optiongroup]")
     remove_required();
 
     args = {"--test1", "--flag", "extra"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     main->allow_extras();
     CHECK_NOTHROW(run());
 
@@ -750,7 +750,7 @@ TEST_CASE_METHOD(ManyGroups, "ExtrasFallDown", "[optiongroup]")
     std::vector<std::string> extras {"--test1", "--flag", "extra"};
     CHECK(extras == app.remaining(true));
     CHECK(extras == main->remaining());
-    app.allow_extras(CLI::ExtrasMode::Ignore);
+    app.allow_extras(cli::extras_mode_t::ignore);
 
     CHECK_NOTHROW(run());
 
@@ -895,11 +895,11 @@ TEST_CASE_METHOD(ManyGroups, "OptionFind", "[optiongroup]")
     g1->fallthrough();
     auto *opt_name = g1->get_option("--base");
     CHECK(opt_name == opt_main);
-    CHECK_THROWS_AS(g1->get_option("--notfound"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(g1->get_option("--notfound"), cli::option_not_found_t);
     auto const *g1_const = g1;
     const auto *opt_name_const = g1_const->get_option("--base");
     CHECK(opt_name_const == opt_main);
-    CHECK_THROWS_AS(g1_const->get_option("--notfound"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(g1_const->get_option("--notfound"), cli::option_not_found_t);
 }
 
 // from https://github.com/CLIUtils/CLI11/issues/1315

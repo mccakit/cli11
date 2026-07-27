@@ -10,17 +10,17 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("K3Pi goofit fitter");
+    cli::app_t app("K3Pi goofit fitter");
     // add version output
-    app.set_version_flag("--version", std::string(CLI::version));
+    app.set_version_flag("--version", std::string(cli::version));
     std::string file;
-    CLI::Option *opt = app.add_option("-f,--file,file", file, "File name");
+    cli::option_t *opt = app.add_option("-f,--file,file", file, "File name");
 
     int count {0};
-    CLI::Option *copt = app.add_option("-c,--count", count, "Counter");
+    cli::option_t *copt = app.add_option("-c,--count", count, "Counter");
 
     int v {0};
-    CLI::Option *flag = app.add_flag("--flag", v, "Some flag that can be passed multiple times");
+    cli::option_t *flag = app.add_flag("--flag", v, "Some flag that can be passed multiple times");
 
     double value {0.0}; // = 3.14;
     app.add_option("-d,--double", value, "Some Value");
@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

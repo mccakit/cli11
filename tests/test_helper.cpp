@@ -13,7 +13,7 @@ export using input_t = std::vector<std::string>;
 
 export class TApp {
   public:
-    CLI::App app{"My Test Program"};
+    cli::app_t app{"My Test Program"};
     input_t args{};
     virtual ~TApp() = default;
     void run() {
@@ -30,7 +30,7 @@ export class TempFile {
 
   public:
     explicit TempFile(std::string name) : _name(std::move(name)) {
-        if (!CLI::NonexistentPath(_name).empty())
+        if (!cli::nonexistent_path(_name).empty())
             throw std::runtime_error(_name);
     }
 

@@ -24,7 +24,7 @@ import test_helper;
 TEST_CASE_METHOD(TApp, "SimpleTransform", "[transform]")
 {
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer({{"one", std::string("1")}}));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t({{"one", std::string("1")}}));
     args = {"-s", "one"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -35,7 +35,7 @@ TEST_CASE_METHOD(TApp, "SimpleTransform", "[transform]")
 TEST_CASE_METHOD(TApp, "SimpleTransformInitList", "[transform]")
 {
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer({{"one", "1"}}));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t({{"one", "1"}}));
     args = {"-s", "one"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -46,7 +46,7 @@ TEST_CASE_METHOD(TApp, "SimpleTransformInitList", "[transform]")
 TEST_CASE_METHOD(TApp, "SimpleNumericalTransform", "[transform]")
 {
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(CLI::TransformPairs<int> {{"one", 1}}));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(cli::transform_pairs_t<int> {{"one", 1}}));
     args = {"-s", "one"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -64,7 +64,7 @@ TEST_CASE_METHOD(TApp, "EnumTransform", "[transform]")
     };
     test_cli value {test_cli::val2};
     auto *opt = app.add_option("-s", value)
-                    ->transform(CLI::Transformer(CLI::TransformPairs<test_cli> {
+                    ->transform(cli::transformer_t(cli::transform_pairs_t<test_cli> {
                         {"val1", test_cli::val1}, {"val2", test_cli::val2}, {"val3", test_cli::val3}}));
     args = {"-s", "val1"};
     run();
@@ -81,7 +81,7 @@ TEST_CASE_METHOD(TApp, "EnumTransform", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val4"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     // transformer doesn't do any checking so this still works
     args = {"-s", "5"};
@@ -99,7 +99,7 @@ TEST_CASE_METHOD(TApp, "EnumCheckedTransform", "[transform]")
     };
     test_cli value {test_cli::val1};
     auto *opt = app.add_option("-s", value)
-                    ->transform(CLI::CheckedTransformer(CLI::TransformPairs<test_cli> {
+                    ->transform(cli::checked_transformer_t(cli::transform_pairs_t<test_cli> {
                         {"val1", test_cli::val1}, {"val2", test_cli::val2}, {"val3", test_cli::val3}}));
     args = {"-s", "val1"};
     run();
@@ -120,10 +120,10 @@ TEST_CASE_METHOD(TApp, "EnumCheckedTransform", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val4"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-s", "5"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 // from to-mas-kral Issue #1086
@@ -142,7 +142,7 @@ TEST_CASE_METHOD(TApp, "EnumCheckedTransformUint8", "[transform]")
     };
 
     app.add_option("-f,--foo", type, "FooType")
-        ->transform(CLI::CheckedTransformer(foo_map, CLI::ignore_case))
+        ->transform(cli::checked_transformer_t(foo_map, cli::ignore_case))
         ->default_val(FooType::A)
         ->force_callback();
 
@@ -161,7 +161,7 @@ TEST_CASE_METHOD(TApp, "EnumCheckedDefaultTransform", "[transform]")
     };
     app.add_option("--existing", "What to do if file already exists in the destination")
         ->transform(
-            CLI::CheckedTransformer(std::unordered_map<std::string, existing> {{"abort", existing::abort},
+            cli::checked_transformer_t(std::unordered_map<std::string, existing> {{"abort", existing::abort},
                                                                                {"overwrite", existing ::overwrite},
                                                                                {"delete", existing::remove},
                                                                                {"remove", existing::remove}}))
@@ -183,10 +183,10 @@ TEST_CASE_METHOD(TApp, "EnumCheckedDefaultTransformCallback", "[transform]")
         overwrite,
         remove
     };
-    auto cmd = std::make_shared<CLI::App>("deploys the repository somewhere", "deploy");
+    auto cmd = std::make_shared<cli::app_t>("deploys the repository somewhere", "deploy");
     cmd->add_option("--existing", "What to do if file already exists in the destination")
         ->transform(
-            CLI::CheckedTransformer(std::unordered_map<std::string, existing> {{"abort", existing::abort},
+            cli::checked_transformer_t(std::unordered_map<std::string, existing> {{"abort", existing::abort},
                                                                                {"overwrite", existing::overwrite},
                                                                                {"delete", existing::remove},
                                                                                {"remove", existing::remove}}))
@@ -202,7 +202,7 @@ TEST_CASE_METHOD(TApp, "EnumCheckedDefaultTransformCallback", "[transform]")
 TEST_CASE_METHOD(TApp, "SimpleTransformFn", "[transform]")
 {
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer({{"one", "1"}}, CLI::ignore_case));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t({{"one", "1"}}, cli::ignore_case));
     args = {"-s", "ONE"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -233,7 +233,7 @@ TEST_CASE_METHOD(TApp, "streamTransformCheck", "[transform]")
     Color color = Color::kRed;
 
     app.add_option("--color", color)
-        ->transform(CLI::CheckedTransformer(color_map, CLI::ignore_case))
+        ->transform(cli::checked_transformer_t(color_map, cli::ignore_case))
         ->default_val(Color::kRed); // BUG: Validates "kRed" against {"red", "blue"}
 
     CHECK_NOTHROW(app.parse("")); // Should use default
@@ -245,7 +245,7 @@ TEST_CASE_METHOD(TApp, "StringViewTransformFn", "[transform]")
     std::string value;
     std::map<std::string_view, std::string_view> map = {// key length > std::string().capacity() [SSO length]
                                                         {"a-rather-long-argument", "mapped"}};
-    app.add_option("-s", value)->transform(CLI::CheckedTransformer(map));
+    app.add_option("-s", value)->transform(cli::checked_transformer_t(map));
     args = {"-s", "a-rather-long-argument"};
     run();
     CHECK("mapped" == value);
@@ -258,7 +258,7 @@ TEST_CASE_METHOD(TApp, "SimpleNumericalTransformFn", "[transform]")
     int value {0};
     auto *opt =
         app.add_option("-s", value)
-            ->transform(CLI::Transformer(std::vector<std::pair<std::string, int>> {{"one", 1}}, CLI::ignore_case));
+            ->transform(cli::transformer_t(std::vector<std::pair<std::string, int>> {{"one", 1}}, cli::ignore_case));
     args = {"-s", "ONe"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -270,7 +270,7 @@ TEST_CASE_METHOD(TApp, "SimpleNumericalTransformFnVector", "[transform]")
 {
     std::vector<std::pair<std::string, int>> conversions {{"one", 1}, {"two", 2}};
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(conversions, CLI::ignore_case));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(conversions, cli::ignore_case));
     args = {"-s", "ONe"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -285,7 +285,7 @@ TEST_CASE_METHOD(TApp, "SimpleNumericalTransformFnArray", "[transform]")
     conversions[1] = std::make_pair(std::string("two"), 2);
 
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(conversions, CLI::ignore_case));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(conversions, cli::ignore_case));
     args = {"-s", "ONe"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -302,7 +302,7 @@ TEST_CASE_METHOD(TApp, "SimpleNumericalTransformFnconstexprArray", "[transform]"
     constexpr std::array<std::pair<const char *, int>, 2> conversions_c {{p1, p2}};
 
     int value {0};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(&conversions_c, CLI::ignore_case));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(&conversions_c, cli::ignore_case));
     args = {"-s", "ONe"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -327,11 +327,11 @@ TEST_CASE_METHOD(TApp, "EnumTransformFn", "[transform]")
     };
     test_cli value {test_cli::val2};
     auto *opt = app.add_option("-s", value)
-                    ->transform(CLI::Transformer(CLI::TransformPairs<test_cli> {{"val1", test_cli::val1},
+                    ->transform(cli::transformer_t(cli::transform_pairs_t<test_cli> {{"val1", test_cli::val1},
                                                                                 {"val2", test_cli::val2},
                                                                                 {"val3", test_cli::val3}},
-                                                 CLI::ignore_case,
-                                                 CLI::ignore_underscore));
+                                                 cli::ignore_case,
+                                                 cli::ignore_underscore));
     args = {"-s", "val_1"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -347,7 +347,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFn", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val_4"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "EnumTransformFnMap", "[transform]")
@@ -360,7 +360,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnMap", "[transform]")
     };
     std::map<std::string, test_cli> map {{"val1", test_cli::val1}, {"val2", test_cli::val2}, {"val3", test_cli::val3}};
     test_cli value {test_cli::val3};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(map, CLI::ignore_case, CLI::ignore_underscore));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(map, cli::ignore_case, cli::ignore_underscore));
     args = {"-s", "val_1"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -376,7 +376,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnMap", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val_4"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "EnumTransformFnPtrMap", "[transform]")
@@ -391,7 +391,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnPtrMap", "[transform]")
     std::map<std::string, test_cli> map {{"val1", test_cli::val1}, {"val2", test_cli::val2}, {"val3", test_cli::val3}};
     test_cli value {test_cli::val2};
     auto *opt =
-        app.add_option("-s", value)->transform(CLI::Transformer(&map, CLI::ignore_case, CLI::ignore_underscore));
+        app.add_option("-s", value)->transform(cli::transformer_t(&map, cli::ignore_case, cli::ignore_underscore));
     args = {"-s", "val_1"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -407,7 +407,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnPtrMap", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val_4"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     map["val4"] = test_cli::val4;
     run();
@@ -430,7 +430,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnSharedPtrMap", "[transform]")
     mp["val3"] = test_cli::val3;
 
     test_cli value {test_cli::val2};
-    auto *opt = app.add_option("-s", value)->transform(CLI::Transformer(map, CLI::ignore_case, CLI::ignore_underscore));
+    auto *opt = app.add_option("-s", value)->transform(cli::transformer_t(map, cli::ignore_case, cli::ignore_underscore));
     args = {"-s", "val_1"};
     run();
     CHECK(app.count("-s") == 1u);
@@ -446,7 +446,7 @@ TEST_CASE_METHOD(TApp, "EnumTransformFnSharedPtrMap", "[transform]")
     CHECK(test_cli::val3 == value);
 
     args = {"-s", "val_4"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     mp["val4"] = test_cli::val4;
     run();
@@ -459,11 +459,11 @@ TEST_CASE_METHOD(TApp, "TransformCascade", "[transform]")
 
     std::string output;
     auto *opt = app.add_option("-s", output);
-    opt->transform(CLI::Transformer({{"abc", "abcd"}, {"bbc", "bbcd"}, {"cbc", "cbcd"}}, CLI::ignore_case));
+    opt->transform(cli::transformer_t({{"abc", "abcd"}, {"bbc", "bbcd"}, {"cbc", "cbcd"}}, cli::ignore_case));
     opt->transform(
-        CLI::Transformer({{"ab", "abc"}, {"bc", "bbc"}, {"cb", "cbc"}}, CLI::ignore_case, CLI::ignore_underscore));
-    opt->transform(CLI::Transformer({{"a", "ab"}, {"b", "bb"}, {"c", "cb"}}, CLI::ignore_case));
-    opt->check(CLI::IsMember({"abcd", "bbcd", "cbcd"}));
+        cli::transformer_t({{"ab", "abc"}, {"bc", "bbc"}, {"cb", "cbc"}}, cli::ignore_case, cli::ignore_underscore));
+    opt->transform(cli::transformer_t({{"a", "ab"}, {"b", "bb"}, {"c", "cb"}}, cli::ignore_case));
+    opt->check(cli::is_member_t({"abcd", "bbcd", "cbcd"}));
     args = {"-s", "abcd"};
     run();
     CHECK("abcd" == output);
@@ -488,13 +488,13 @@ TEST_CASE_METHOD(TApp, "TransformCascadeDeactivate", "[transform]")
     std::string output;
     auto *opt = app.add_option("-s", output);
     opt->transform(
-        CLI::Transformer({{"abc", "abcd"}, {"bbc", "bbcd"}, {"cbc", "cbcd"}}, CLI::ignore_case).name("tform1"));
+        cli::transformer_t({{"abc", "abcd"}, {"bbc", "bbcd"}, {"cbc", "cbcd"}}, cli::ignore_case).name("tform1"));
     opt->transform(
-        CLI::Transformer({{"ab", "abc"}, {"bc", "bbc"}, {"cb", "cbc"}}, CLI::ignore_case, CLI::ignore_underscore)
+        cli::transformer_t({{"ab", "abc"}, {"bc", "bbc"}, {"cb", "cbc"}}, cli::ignore_case, cli::ignore_underscore)
             .name("tform2")
             .active(false));
-    opt->transform(CLI::Transformer({{"a", "ab"}, {"b", "bb"}, {"c", "cb"}}, CLI::ignore_case).name("tform3"));
-    opt->check(CLI::IsMember({"abcd", "bbcd", "cbcd"}).name("check"));
+    opt->transform(cli::transformer_t({{"a", "ab"}, {"b", "bb"}, {"c", "cb"}}, cli::ignore_case).name("tform3"));
+    opt->check(cli::is_member_t({"abcd", "bbcd", "cbcd"}).name("check"));
     args = {"-s", "abcd"};
     run();
     CHECK("abcd" == output);
@@ -504,7 +504,7 @@ TEST_CASE_METHOD(TApp, "TransformCascadeDeactivate", "[transform]")
     CHECK("bbcd" == output);
 
     args = {"-s", "C_B"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     auto *validator = opt->get_validator("tform2");
     CHECK(!validator->get_active());
@@ -520,7 +520,7 @@ TEST_CASE_METHOD(TApp, "TransformCascadeDeactivate", "[transform]")
     run();
     CHECK("gsdgsgs" == output);
 
-    CHECK_THROWS_AS(opt->get_validator("sdfsdf"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(opt->get_validator("sdfsdf"), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntTransformFn", "[transform]")
@@ -528,7 +528,7 @@ TEST_CASE_METHOD(TApp, "IntTransformFn", "[transform]")
     std::string value;
     app.add_option("-s", value)
         ->transform(
-            CLI::CheckedTransformer(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}, [](int in) { return in - 10; }));
+            cli::checked_transformer_t(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}, [](int in) { return in - 10; }));
     args = {"-s", "25"};
     run();
     CHECK("5" == value);
@@ -538,16 +538,16 @@ TEST_CASE_METHOD(TApp, "IntTransformFn", "[transform]")
     CHECK("6" == value);
 
     args = {"-s", "45"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 
     args = {"-s", "val_4"};
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntTransformNonConvertible", "[transform]")
 {
     std::string value;
-    app.add_option("-s", value)->transform(CLI::Transformer(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}));
+    app.add_option("-s", value)->transform(cli::transformer_t(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}));
     args = {"-s", "15"};
     run();
     CHECK("5" == value);
@@ -566,8 +566,8 @@ TEST_CASE_METHOD(TApp, "IntTransformNonMerge", "[transform]")
 {
     std::string value;
     app.add_option("-s", value)
-        ->transform(CLI::Transformer(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) &
-                        CLI::Transformer(std::map<int, int> {{25, 5}, {28, 6}, {31, 7}}),
+        ->transform(cli::transformer_t(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) &
+                        cli::transformer_t(std::map<int, int> {{25, 5}, {28, 6}, {31, 7}}),
                     "merge");
     args = {"-s", "15"};
     run();
@@ -607,8 +607,8 @@ TEST_CASE_METHOD(TApp, "IntTransformMergeWithCustomValidator", "[transform]")
 {
     std::string value;
     auto *opt = app.add_option("-s", value)
-                    ->transform(CLI::Transformer(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) |
-                                    CLI::Validator(
+                    ->transform(cli::transformer_t(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) |
+                                    cli::validator_t(
                                         [](std::string &element) {
                                             if (element == "frog")
                                             {
@@ -650,8 +650,8 @@ TEST_CASE_METHOD(TApp, "IntTransformMergeWithCustomSharedValidator", "[transform
 {
     std::string value;
 
-    CLI::Validator_p ctrans = std::make_shared<CLI::Validator>(
-        CLI::Transformer(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) | CLI::Validator(
+    cli::validator_ptr_t ctrans = std::make_shared<cli::validator_t>(
+        cli::transformer_t(std::map<int, int> {{15, 5}, {18, 6}, {21, 7}}) | cli::validator_t(
                                                                                [](std::string &element) {
                                                                                    if (element == "frog")
                                                                                    {
@@ -710,7 +710,7 @@ TEST_CASE_METHOD(TApp, "StringEscapeValid", "[transform]")
 
     std::string value {};
 
-    app.add_option("-n", value)->transform(CLI::EscapedString);
+    app.add_option("-n", value)->transform(cli::escaped_string);
 
     args = {"-n", test_data.first};
 
@@ -732,9 +732,9 @@ TEST_CASE_METHOD(TApp, "StringEscapeInvalid", "[transform]")
 
     std::string value {};
 
-    app.add_option("-n", value)->transform(CLI::EscapedString);
+    app.add_option("-n", value)->transform(cli::escaped_string);
 
     args = {"-n", test_data};
 
-    CHECK_THROWS_AS(run(), CLI::ValidationError);
+    CHECK_THROWS_AS(run(), cli::validation_error_t);
 }

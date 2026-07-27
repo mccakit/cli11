@@ -27,7 +27,7 @@ TEST_CASE_METHOD(TApp, "doubleFunctionFail", "[optiontype]")
     double res = NAN;
     app.add_option_function<double>("--val", [&res](double val) { res = std::abs(val + 54); });
     args = {"--val", "not_double"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "doubleVectorFunction", "[optiontype]")
@@ -53,9 +53,9 @@ TEST_CASE_METHOD(TApp, "doubleVectorFunctionFail", "[optiontype]")
         std::transform(res.begin(), res.end(), res.begin(), [](double v) { return v + 5.0; });
     });
     args = {"--val", "five", "--val", "nine", "--val", "7"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
     // check that getting the results through the results function generates the same error
-    CHECK_THROWS_AS(app[vstring]->results(res), CLI::ConversionError);
+    CHECK_THROWS_AS(app[vstring]->results(res), cli::conversion_error_t);
     auto strvec = app[vstring]->as<std::vector<std::string>>();
     CHECK(3u == strvec.size());
 }
@@ -78,7 +78,7 @@ TEST_CASE_METHOD(TApp, "doubleVectorFunctionRunCallbackOnDefault", "[optiontype]
     CHECK(7.0 == res[0]);
     CHECK(3.0 == res[2]);
 
-    CHECK_THROWS_AS(opt->default_val("this is a string"), CLI::ConversionError);
+    CHECK_THROWS_AS(opt->default_val("this is a string"), cli::conversion_error_t);
     auto vec = opt->as<std::vector<double>>();
     REQUIRE(3U == vec.size());
     CHECK(5.0 == vec[0]);
@@ -86,9 +86,9 @@ TEST_CASE_METHOD(TApp, "doubleVectorFunctionRunCallbackOnDefault", "[optiontype]
 
 #if (defined(CLI11_ENABLE_EXTRA_VALIDATORS) && CLI11_ENABLE_EXTRA_VALIDATORS == 1) ||                                  \
     (!defined(CLI11_DISABLE_EXTRA_VALIDATORS) || CLI11_DISABLE_EXTRA_VALIDATORS == 0)
-    opt->check(CLI::Number);
+    opt->check(cli::number);
     opt->run_callback_for_default(false);
-    CHECK_THROWS_AS(opt->default_val("this is a string"), CLI::ValidationError);
+    CHECK_THROWS_AS(opt->default_val("this is a string"), cli::validation_error_t);
 #endif
 }
 
@@ -192,15 +192,15 @@ TEST_CASE_METHOD(TApp, "intConversionsErange", "[optiontype]")
 
     args = {"--val", "0o11545241241415151512312415123125667"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 
     args = {"--val", "0b1011000001101011001100110011111000101010101011111111111111111111111001010111011100"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 
     args = {"--val", "0B1011000001101011001100110011111000101010101011111111111111111111111001010111011100"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 }
 
 static const std::map<std::string, std::uint64_t> testValuesUInt {
@@ -253,15 +253,15 @@ TEST_CASE_METHOD(TApp, "uintConversionsErange", "[optiontype]")
 
     args = {"--val", "0o11545241241415151512312415123125667"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 
     args = {"--val", "0b1011000001101011001100110011111000101010101011111111111111111111111001010111011100"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 
     args = {"--val", "0B1011000001101011001100110011111000101010101011111111111111111111111001010111011100"};
 
-    CHECK_THROWS_AS(run(), CLI::ParseError);
+    CHECK_THROWS_AS(run(), cli::parse_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "CharOption", "[optiontype]")
@@ -287,7 +287,7 @@ TEST_CASE_METHOD(TApp, "CharOption", "[optiontype]")
     CHECK(0x44 == c1);
 
     args = {"-c", "751615654161688126132138844896646748852"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntegerOverFlowShort", "[optiontype]")
@@ -299,16 +299,16 @@ TEST_CASE_METHOD(TApp, "IntegerOverFlowShort", "[optiontype]")
     app.add_option("-b", B);
 
     args = {"-a", "2626254242"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "2626254242"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-26262"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-262624262525"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntegerOverFlowInt", "[optiontype]")
@@ -320,16 +320,16 @@ TEST_CASE_METHOD(TApp, "IntegerOverFlowInt", "[optiontype]")
     app.add_option("-b", B);
 
     args = {"-a", "262625424225252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "262625424225252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-2626225252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-26262426252525252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntegerOverFlowLong", "[optiontype]")
@@ -341,16 +341,16 @@ TEST_CASE_METHOD(TApp, "IntegerOverFlowLong", "[optiontype]")
     app.add_option("-b", B);
 
     args = {"-a", "1111111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "1111111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-2626225252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "IntegerOverFlowLongLong", "[optiontype]")
@@ -362,16 +362,16 @@ TEST_CASE_METHOD(TApp, "IntegerOverFlowLongLong", "[optiontype]")
     app.add_option("-b", B);
 
     args = {"-a", "1111111111111111111111111111111111111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "1111111111111111111111111111111111111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-2626225252"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-b", "-111111111111111111111111111111111111111111111111111111111"};
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 // now with tuple support this is possible

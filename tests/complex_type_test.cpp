@@ -11,18 +11,18 @@ import test_helper;
 
 using cx = std::complex<double>;
 
-CLI::Option *add_option(
-    CLI::App &app, std::string name, cx &variable, std::string description = "", bool defaulted = false)
+cli::option_t *add_option(
+    cli::app_t &app, std::string name, cx &variable, std::string description = "", bool defaulted = false)
 {
-    CLI::callback_t fun = [&variable](CLI::results_t res) {
+    cli::callback_t fun = [&variable](cli::results_t res) {
         double x = 0, y = 0;
-        bool worked = CLI::detail::lexical_cast(res[0], x) && CLI::detail::lexical_cast(res[1], y);
+        bool worked = cli::detail::lexical_cast(res[0], x) && cli::detail::lexical_cast(res[1], y);
         if (worked)
             variable = cx(x, y);
         return worked;
     };
 
-    CLI::Option *opt = app.add_option(name, fun, description, defaulted);
+    cli::option_t *opt = app.add_option(name, fun, description, defaulted);
     opt->type_name("COMPLEX")->type_size(2);
     if (defaulted)
     {
@@ -79,7 +79,7 @@ TEST_CASE_METHOD(TApp, "DefaultedComplex", "[complex]")
 // fail.  And if a clang compiler is using libstd++ then this will generate an error as well so this is just a check to
 // simplify compilation and prevent a much more complicated #if expression
 #include <regex>
-namespace CLI
+namespace cli
 {
     namespace detail
     {
@@ -98,7 +98,7 @@ namespace CLI
             std::regex_search(input, m, creg);
             if (m.size() == 9)
             {
-                worked = CLI::detail::lexical_cast(m[1], x) && CLI::detail::lexical_cast(m[6], y);
+                worked = cli::detail::lexical_cast(m[1], x) && cli::detail::lexical_cast(m[6], y);
                 if (worked)
                 {
                     if (*m[5].first == '-')
@@ -112,14 +112,14 @@ namespace CLI
                 if ((input.back() == 'j') || (input.back() == 'i'))
                 {
                     auto strval = input.substr(0, input.size() - 1);
-                    CLI::detail::trim(strval);
-                    worked = CLI::detail::lexical_cast(strval, y);
+                    cli::detail::trim(strval);
+                    worked = cli::detail::lexical_cast(strval, y);
                 }
                 else
                 {
                     std::string ival = input;
-                    CLI::detail::trim(ival);
-                    worked = CLI::detail::lexical_cast(ival, x);
+                    cli::detail::trim(ival);
+                    worked = cli::detail::lexical_cast(ival, x);
                 }
             }
             if (worked)
@@ -157,7 +157,7 @@ TEST_CASE_METHOD(TApp, "AddingComplexParserDetail", "[complex]")
     {
         skip_tests = true;
     }
-    static_assert(CLI::detail::is_complex<cx>::value, "complex should register as complex in this situation");
+    static_assert(cli::detail::complex_like<cx>, "complex should register as complex in this situation");
     if (!skip_tests)
     {
         cx comp {0, 0};
@@ -201,8 +201,8 @@ class complex_new
 TEST_CASE_METHOD(TApp, "newComplex", "[complex]")
 {
     complex_new cval;
-    static_assert(CLI::detail::is_complex<complex_new>::value, "complex new does not register as a complex type");
-    static_assert(CLI::detail::classify_object<complex_new>::value == CLI::detail::object_category::complex_number,
+    static_assert(cli::detail::complex_like<complex_new>, "complex new does not register as a complex type");
+    static_assert(cli::detail::classify_object_v<complex_new> == cli::detail::object_category_t::complex_number,
                   "complex new does not result in complex number categorization");
     app.add_option("-c,--complex", cval, "add a complex number option");
     args = {"-c", "1.5+2.5j"};

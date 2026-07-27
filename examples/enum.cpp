@@ -18,7 +18,7 @@ enum class Level : int
 
 int main(int argc, char **argv)
 {
-    CLI::App app;
+    cli::app_t app;
 
     Level level {Level::Low};
     // specify string->value mappings
@@ -27,19 +27,19 @@ int main(int argc, char **argv)
     // translations already
     app.add_option("-l,--level", level, "Level settings")
         ->required()
-        ->transform(CLI::CheckedTransformer(map, CLI::ignore_case));
+        ->transform(cli::checked_transformer_t(map, cli::ignore_case));
 
     try
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }
 
     // CLI11's built in enum streaming can be used outside CLI11 like this:
-    using CLI::enums::operator<<;
+    using cli::enums::operator<<;
     std::cout << "Enum received: " << level << '\n';
 
     return 0;

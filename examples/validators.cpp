@@ -10,18 +10,18 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("Validator checker");
+    cli::app_t app("Validator checker");
 
     std::string file;
-    app.add_option("-f,--file,file", file, "File name")->check(CLI::ExistingFile);
+    app.add_option("-f,--file,file", file, "File name")->check(cli::existing_file);
 
     int count {0};
-    app.add_option("-v,--value", count, "Value in range")->check(CLI::Range(3, 6));
+    app.add_option("-v,--value", count, "Value in range")->check(cli::range_t(3, 6));
     try
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

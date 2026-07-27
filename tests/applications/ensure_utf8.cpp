@@ -9,7 +9,7 @@ import cli11;
 
 int main(int argc, char **argv)
 {
-    CLI::App app {"App description"};
+    cli::app_t app {"App description"};
     char **original_argv = argv;
     argv = app.ensure_utf8(argv);
 

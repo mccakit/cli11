@@ -8,7 +8,7 @@ import std;
 import cli11;
 
 // Custom validator is an alias of Validator, the constructor takes a function that takes as input and returns a string
-const CLI::CustomValidator ISO8601(
+const cli::custom_validator_t ISO8601(
     [](std::string &input) {
         std::tm tm = {};
         std::istringstream ss(input);
@@ -25,7 +25,7 @@ const CLI::CustomValidator ISO8601(
 int main(int argc, char **argv)
 {
 
-    CLI::App app("custom validator testing");
+    cli::app_t app("custom validator testing");
 
     std::string value;
     app.add_option("--time", value, "enter a date in iso8601 format")->check(ISO8601)->required();
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

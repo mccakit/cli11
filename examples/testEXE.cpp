@@ -13,7 +13,7 @@ int main(int argc, const char *argv[])
 {
 
     int value {0};
-    CLI::App app {"Test App"};
+    cli::app_t app {"Test App"};
     app.add_option("-v", value, "value");
 
     auto *subcom = app.add_subcommand("sub", "")->prefix_command();
@@ -21,7 +21,7 @@ int main(int argc, const char *argv[])
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

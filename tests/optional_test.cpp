@@ -131,8 +131,8 @@ TEST_CASE_METHOD(TApp, "StdOptionalUint", "[optional]")
     args = {"-i", "15"};
     run();
     CHECK((opt && (15U == *opt)));
-    static_assert(CLI::detail::classify_object<std::optional<std::uint64_t>>::value ==
-                  CLI::detail::object_category::wrapper_value);
+    static_assert(cli::detail::classify_object_v<std::optional<std::uint64_t>> ==
+                  cli::detail::object_category_t::wrapper_value);
 }
 
 TEST_CASE_METHOD(TApp, "StdOptionalbool", "[optional]")
@@ -155,8 +155,8 @@ TEST_CASE_METHOD(TApp, "StdOptionalbool", "[optional]")
     {
         CHECK_FALSE(*opt);
     }
-    static_assert(CLI::detail::classify_object<std::optional<bool>>::value ==
-                  CLI::detail::object_category::wrapper_value);
+    static_assert(cli::detail::classify_object_v<std::optional<bool>> ==
+                  cli::detail::object_category_t::wrapper_value);
 }
 
 #ifdef _MSC_VER
@@ -259,7 +259,7 @@ TEST_CASE_METHOD(TApp, "BoostOptionalStringTest", "[optional]")
 }
 namespace boost
 {
-    using CLI::enums::operator<<;
+    using cli::enums::operator<<;
 }
 
 TEST_CASE_METHOD(TApp, "BoostOptionalEnumTest", "[optional]")

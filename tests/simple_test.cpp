@@ -15,17 +15,17 @@ TEST_CASE("Basic: Empty", "[simple]")
 {
 
     {
-        CLI::App app;
+        cli::app_t app;
         input_t simpleput;
         app.parse(simpleput);
     }
     {
-        CLI::App app;
+        cli::app_t app;
         input_t spare = {"spare"};
-        CHECK_THROWS_AS(app.parse(spare), CLI::ExtrasError);
+        CHECK_THROWS_AS(app.parse(spare), cli::extras_error_t);
     }
     {
-        CLI::App app;
+        cli::app_t app;
         input_t simpleput;
         app.parse(simpleput);
     }

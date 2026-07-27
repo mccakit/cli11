@@ -11,35 +11,35 @@ import test_helper;
 
 TEST_CASE_METHOD(TApp, "AddingExistingShort", "[creation]")
 {
-    CLI::Option *opt = app.add_flag("-c,--count");
+    cli::option_t *opt = app.add_flag("-c,--count");
     CHECK(std::vector<std::string>({"count"}) == opt->get_lnames());
     CHECK(std::vector<std::string>({"c"}) == opt->get_snames());
 
-    CHECK_THROWS_AS(app.add_flag("--cat,-c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--cat,-c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingLong", "[creation]")
 {
     app.add_flag("-q,--count");
-    CHECK_THROWS_AS(app.add_flag("--count,-c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--count,-c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingShortNoCase", "[creation]")
 {
     app.add_flag("-C,--count")->ignore_case();
-    CHECK_THROWS_AS(app.add_flag("--cat,-c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--cat,-c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingLongNoCase", "[creation]")
 {
     app.add_flag("-q,--count")->ignore_case();
-    CHECK_THROWS_AS(app.add_flag("--Count,-c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--Count,-c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingNoCaseReversed", "[creation]")
 {
     app.add_flag("-c,--count")->ignore_case();
-    CHECK_THROWS_AS(app.add_flag("--cat,-C"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--cat,-C"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingWithCase", "[creation]")
@@ -51,13 +51,13 @@ TEST_CASE_METHOD(TApp, "AddingExistingWithCase", "[creation]")
 TEST_CASE_METHOD(TApp, "AddingExistingShortLong", "[creation]")
 {
     app.add_flag("-c");
-    CHECK_THROWS_AS(app.add_flag("--c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_flag("--c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingLongShort", "[creation]")
 {
     app.add_flag("--c");
-    CHECK_THROWS_AS(app.add_option("-c"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_option("-c"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingWithCaseAfter", "[creation]")
@@ -65,7 +65,7 @@ TEST_CASE_METHOD(TApp, "AddingExistingWithCaseAfter", "[creation]")
     auto *count = app.add_flag("-c,--count");
     app.add_flag("--Cat,-C");
 
-    CHECK_THROWS_AS(count->ignore_case(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(count->ignore_case(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingWithCaseAfter2", "[creation]")
@@ -73,7 +73,7 @@ TEST_CASE_METHOD(TApp, "AddingExistingWithCaseAfter2", "[creation]")
     app.add_flag("-c,--count");
     auto *cat = app.add_flag("--Cat,-C");
 
-    CHECK_THROWS_AS(cat->ignore_case(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(cat->ignore_case(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingWithUnderscoreAfter", "[creation]")
@@ -81,7 +81,7 @@ TEST_CASE_METHOD(TApp, "AddingExistingWithUnderscoreAfter", "[creation]")
     auto *count = app.add_flag("--underscore");
     app.add_flag("--under_score");
 
-    CHECK_THROWS_AS(count->ignore_underscore(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(count->ignore_underscore(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingExistingWithUnderscoreAfter2", "[creation]")
@@ -89,19 +89,19 @@ TEST_CASE_METHOD(TApp, "AddingExistingWithUnderscoreAfter2", "[creation]")
     auto *count = app.add_flag("--under_score");
     app.add_flag("--underscore");
 
-    CHECK_THROWS_AS(count->ignore_underscore(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(count->ignore_underscore(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "matchPositional", "[creation]")
 {
     app.add_option("firstoption");
-    CHECK_THROWS_AS(app.add_option("--firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_option("--firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "matchPositional2", "[creation]")
 {
     app.add_option("--firstoption");
-    CHECK_THROWS_AS(app.add_option("firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_option("firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup1", "[creation]")
@@ -109,7 +109,7 @@ TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup1", "[creation]")
 
     auto *g1 = app.add_option_group("group_b");
     g1->add_option("--firstoption");
-    CHECK_THROWS_AS(app.add_option("firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_option("firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup2", "[creation]")
@@ -117,7 +117,7 @@ TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup2", "[creation]")
 
     app.add_option("firstoption");
     auto *g1 = app.add_option_group("group_b");
-    CHECK_THROWS_AS(g1->add_option("--firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(g1->add_option("--firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup3", "[creation]")
@@ -125,7 +125,7 @@ TEST_CASE_METHOD(TApp, "matchPositionalInOptionGroup3", "[creation]")
 
     app.add_option("f");
     auto *g1 = app.add_option_group("group_b");
-    CHECK_THROWS_AS(g1->add_option("-f"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(g1->add_option("-f"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingMultipleInfPositionals", "[creation]")
@@ -134,17 +134,17 @@ TEST_CASE_METHOD(TApp, "AddingMultipleInfPositionals", "[creation]")
     app.add_option("one", one);
     app.add_option("two", two);
 
-    CHECK_THROWS_AS(run(), CLI::InvalidError);
+    CHECK_THROWS_AS(run(), cli::invalid_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "AddingMultipleInfPositionalsSubcom", "[creation]")
 {
     std::vector<std::string> one, two;
-    CLI::App *below = app.add_subcommand("below");
+    cli::app_t *below = app.add_subcommand("below");
     below->add_option("one", one);
     below->add_option("two", two);
 
-    CHECK_THROWS_AS(run(), CLI::InvalidError);
+    CHECK_THROWS_AS(run(), cli::invalid_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatching", "[creation]")
@@ -152,43 +152,43 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomMatching", "[creation]")
     app.add_subcommand("first");
     app.add_subcommand("second");
     app.add_subcommand("Second");
-    CHECK_THROWS_AS(app.add_subcommand("first"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("first"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "RecoverSubcommands", "[creation]")
 {
-    CLI::App *app1 = app.add_subcommand("app1");
-    CLI::App *app2 = app.add_subcommand("app2");
-    CLI::App *app3 = app.add_subcommand("app3");
-    CLI::App *app4 = app.add_subcommand("app4");
+    cli::app_t *app1 = app.add_subcommand("app1");
+    cli::app_t *app2 = app.add_subcommand("app2");
+    cli::app_t *app3 = app.add_subcommand("app3");
+    cli::app_t *app4 = app.add_subcommand("app4");
 
-    CHECK(std::vector<CLI::App *>({app1, app2, app3, app4}) == app.get_subcommands({}));
+    CHECK(std::vector<cli::app_t *>({app1, app2, app3, app4}) == app.get_subcommands({}));
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCase", "[creation]")
 {
     app.add_subcommand("first")->ignore_case();
-    CHECK_THROWS_AS(app.add_subcommand("fIrst"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("fIrst"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCaseFirst", "[creation]")
 {
     app.ignore_case();
     app.add_subcommand("first");
-    CHECK_THROWS_AS(app.add_subcommand("fIrst"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("fIrst"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscore", "[creation]")
 {
     app.add_subcommand("first_option")->ignore_underscore();
-    CHECK_THROWS_AS(app.add_subcommand("firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscoreFirst", "[creation]")
 {
     app.ignore_underscore();
     app.add_subcommand("first_option");
-    CHECK_THROWS_AS(app.add_subcommand("firstoption"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("firstoption"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCaseInplace", "[creation]")
@@ -196,7 +196,7 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCaseInplace", "[creation]")
     app.add_subcommand("first");
     auto *first = app.add_subcommand("fIrst");
 
-    CHECK_THROWS_AS(first->ignore_case(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(first->ignore_case(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCaseInplace2", "[creation]")
@@ -204,7 +204,7 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithCaseInplace2", "[creation]")
     auto *first = app.add_subcommand("first");
     app.add_subcommand("fIrst");
 
-    CHECK_THROWS_AS(first->ignore_case(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(first->ignore_case(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscoreInplace", "[creation]")
@@ -212,7 +212,7 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscoreInplace", "[creation
     app.add_subcommand("first_option");
     auto *first = app.add_subcommand("firstoption");
 
-    CHECK_THROWS_AS(first->ignore_underscore(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(first->ignore_underscore(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscoreInplace2", "[creation]")
@@ -220,7 +220,7 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomMatchingWithUnderscoreInplace2", "[creatio
     auto *first = app.add_subcommand("firstoption");
     app.add_subcommand("first_option");
 
-    CHECK_THROWS_AS(first->ignore_underscore(), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(first->ignore_underscore(), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "MultipleSubcomNoMatchingInplace2", "[creation]")
@@ -244,31 +244,31 @@ TEST_CASE_METHOD(TApp, "MultipleSubcomNoMatchingInplaceUnderscore2", "[creation]
 TEST_CASE_METHOD(TApp, "IncorrectConstructionFlagPositional1", "[creation]")
 {
     // This wants to be one line with clang-format
-    CHECK_THROWS_AS(app.add_flag("cat"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_flag("cat"), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "IncorrectConstructionFlagPositional2", "[creation]")
 {
     int x {0};
-    CHECK_THROWS_AS(app.add_flag("cat", x), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_flag("cat", x), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "IncorrectConstructionFlagPositional3", "[creation]")
 {
     bool x {false};
-    CHECK_THROWS_AS(app.add_flag("cat", x), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_flag("cat", x), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "IncorrectConstructionNeedsCannotFind", "[creation]")
 {
     auto *cat = app.add_flag("--cat");
-    CHECK_THROWS_AS(cat->needs("--nothing"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(cat->needs("--nothing"), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "IncorrectConstructionExcludesCannotFind", "[creation]")
 {
     auto *cat = app.add_flag("--cat");
-    CHECK_THROWS_AS(cat->excludes("--nothing"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(cat->excludes("--nothing"), cli::incorrect_construction_t);
 }
 
 TEST_CASE_METHOD(TApp, "IncorrectConstructionDuplicateNeeds", "[creation]")
@@ -483,7 +483,7 @@ TEST_CASE_METHOD(TApp, "OptionFromDefaultsSubcommands", "[creation]")
 {
     // Initial defaults
     CHECK(!app.option_defaults()->get_required());
-    CHECK(CLI::MultiOptionPolicy::Throw == app.option_defaults()->get_multi_option_policy());
+    CHECK(cli::multi_option_policy_t::reject == app.option_defaults()->get_multi_option_policy());
     CHECK(!app.option_defaults()->get_ignore_case());
     CHECK(!app.option_defaults()->get_ignore_underscore());
     CHECK(!app.option_defaults()->get_disable_flag_override());
@@ -492,7 +492,7 @@ TEST_CASE_METHOD(TApp, "OptionFromDefaultsSubcommands", "[creation]")
 
     app.option_defaults()
         ->required()
-        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast)
+        ->multi_option_policy(cli::multi_option_policy_t::take_last)
         ->ignore_case()
         ->ignore_underscore()
         ->configurable(false)
@@ -502,7 +502,7 @@ TEST_CASE_METHOD(TApp, "OptionFromDefaultsSubcommands", "[creation]")
     auto *app2 = app.add_subcommand("app2");
 
     CHECK(app2->option_defaults()->get_required());
-    CHECK(CLI::MultiOptionPolicy::TakeLast == app2->option_defaults()->get_multi_option_policy());
+    CHECK(cli::multi_option_policy_t::take_last == app2->option_defaults()->get_multi_option_policy());
     CHECK(app2->option_defaults()->get_ignore_case());
     CHECK(app2->option_defaults()->get_ignore_underscore());
     CHECK(!app2->option_defaults()->get_configurable());
@@ -634,14 +634,14 @@ TEST_CASE_METHOD(TApp, "GetOptionList", "[creation]")
     auto *flag = app.add_flag("--one");
     auto *opt = app.add_option("--two", two);
 
-    const CLI::App &const_app = app; // const alias to force use of const-methods
-    std::vector<const CLI::Option *> opt_list = const_app.get_options();
+    const cli::app_t &const_app = app; // const alias to force use of const-methods
+    std::vector<const cli::option_t *> opt_list = const_app.get_options();
 
     REQUIRE(static_cast<std::size_t>(3) == opt_list.size());
     CHECK(flag == opt_list.at(1));
     CHECK(opt == opt_list.at(2));
 
-    std::vector<CLI::Option *> nonconst_opt_list = app.get_options();
+    std::vector<cli::option_t *> nonconst_opt_list = app.get_options();
     for (std::size_t i = 0; i < opt_list.size(); ++i)
     {
         CHECK(opt_list.at(i) == nonconst_opt_list.at(i));
@@ -654,15 +654,15 @@ TEST_CASE_METHOD(TApp, "GetOptionListFilter", "[creation]")
     auto *flag = app.add_flag("--one");
     app.add_option("--two", two);
 
-    const CLI::App &const_app = app; // const alias to force use of const-methods
-    std::vector<const CLI::Option *> opt_listc =
-        const_app.get_options([](const CLI::Option *opt) { return opt->get_name() == "--one"; });
+    const cli::app_t &const_app = app; // const alias to force use of const-methods
+    std::vector<const cli::option_t *> opt_listc =
+        const_app.get_options([](const cli::option_t *opt) { return opt->get_name() == "--one"; });
 
     REQUIRE(static_cast<std::size_t>(1) == opt_listc.size());
     CHECK(flag == opt_listc.at(0));
 
-    std::vector<CLI::Option *> opt_list =
-        app.get_options([](const CLI::Option *opt) { return opt->get_name() == "--one"; });
+    std::vector<cli::option_t *> opt_list =
+        app.get_options([](const cli::option_t *opt) { return opt->get_name() == "--one"; });
 
     REQUIRE(static_cast<std::size_t>(1) == opt_list.size());
     CHECK(flag == opt_list.at(0));
@@ -673,7 +673,7 @@ TEST_CASE("ValidatorTests: TestValidatorCreation", "[creation]")
     std::function<std::string(std::string &)> op1 = [](std::string &val) {
         return (val.size() >= 5) ? std::string {} : val;
     };
-    CLI::Validator V(op1, "", "size");
+    cli::validator_t V(op1, "", "size");
 
     CHECK("size" == V.get_name());
     V.name("harry");
@@ -702,11 +702,11 @@ TEST_CASE("ValidatorTests: TestValidatorOps", "[creation]")
     std::function<std::string(std::string &)> op4 = [](std::string &val) {
         return (val.size() <= 9) ? std::string {} : val;
     };
-    CLI::Validator V1(op1, "SIZE >= 5");
+    cli::validator_t V1(op1, "SIZE >= 5");
 
-    CLI::Validator V2(op2, "SIZE >= 9");
-    CLI::Validator V3(op3, "SIZE < 3");
-    CLI::Validator V4(op4, "SIZE <= 9");
+    cli::validator_t V2(op2, "SIZE >= 9");
+    cli::validator_t V3(op3, "SIZE < 3");
+    cli::validator_t V4(op4, "SIZE <= 9");
 
     std::string two(2, 'a');
     std::string four(4, 'a');
@@ -786,7 +786,7 @@ TEST_CASE("ValidatorTests: TestValidatorNegation", "[creation]")
         return (val.size() >= 5) ? std::string {} : val;
     };
 
-    CLI::Validator V1(op1, "SIZE >= 5", "size");
+    cli::validator_t V1(op1, "SIZE >= 5", "size");
 
     std::string four(4, 'a');
     std::string five(5, 'a');
@@ -808,7 +808,7 @@ TEST_CASE("ValidatorTests: TestValidatorNegation", "[creation]")
 TEST_CASE("ValidatorTests: ValidatorDefaults", "[creation]")
 {
 
-    CLI::Validator V1 {};
+    cli::validator_t V1 {};
 
     std::string four(4, 'a');
     std::string five(5, 'a');
@@ -822,7 +822,7 @@ TEST_CASE("ValidatorTests: ValidatorDefaults", "[creation]")
     CHECK(V1.get_active());
     CHECK(V1.get_modifying());
 
-    CLI::Validator V2 {"check"};
+    cli::validator_t V2 {"check"};
     // make sure this doesn't generate a seg fault or something
     CHECK(V2(five).empty());
     CHECK(V2(four).empty());
@@ -852,7 +852,7 @@ class Unstreamable
 };
 
 // this needs to be a different check then the one after the function definition otherwise they conflict
-static_assert(!CLI::detail::is_istreamable<Unstreamable, std::istream>::value, "Unstreamable type is streamable");
+static_assert(!cli::detail::istreamable<Unstreamable, std::istream>, "Unstreamable type is streamable");
 
 std::istream &operator>>(std::istream &in, Unstreamable &value)
 {
@@ -862,7 +862,7 @@ std::istream &operator>>(std::istream &in, Unstreamable &value)
     return in;
 }
 // these need to be different classes otherwise the definitions conflict
-static_assert(CLI::detail::is_istreamable<Unstreamable>::value,
+static_assert(cli::detail::istreamable<Unstreamable>,
               "Unstreamable type is still unstreamable and it should be");
 
 TEST_CASE_METHOD(TApp, "MakeUnstreamableOptions", "[creation]")

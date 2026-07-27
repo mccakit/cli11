@@ -202,7 +202,7 @@ TEST_CASE_METHOD(TApp, "custom_string_converterFail", "[newparse]")
 
     args = {"-d", "string2"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 /// Wrapper with an inconvenient interface
@@ -234,7 +234,7 @@ template <class T> bool lexical_cast(const std::string &input, badlywrapped<T> &
     // This using declaration lets us use an unqualified call to lexical_cast below. This is important because
     // unqualified call finds the proper overload via argument-dependent lookup, and thus it will be able to find
     // an overload for `spair` type, which is not in `CLI::detail`.
-    using CLI::detail::lexical_cast;
+    using cli::detail::lexical_cast;
 
     T value;
     if (!lexical_cast(input, value))
@@ -286,7 +286,7 @@ struct anotherstring
 // This is a custom converter done via specializing the CLI::detail::lexical_cast template. This was the recommended
 // mechanism for extending the library before, so we need to test it. Don't do this in your code, use
 // argument-dependent lookup as outlined in the examples for spair and template badlywrapped.
-namespace CLI
+namespace cli
 {
     namespace detail
     {
@@ -298,7 +298,7 @@ namespace CLI
             return result;
         }
     } // namespace detail
-} // namespace CLI
+} // namespace cli
 
 TEST_CASE_METHOD(TApp, "custom_string_converter_specialize", "[newparse]")
 {
@@ -327,7 +327,8 @@ template <> struct is_my_lexical_cast_enabled<yetanotherstring> : std::true_type
 {
 };
 
-template <class T, CLI::enable_if_t<is_my_lexical_cast_enabled<T>::value, CLI::detail::enabler> = CLI::detail::dummy>
+template <class T>
+    requires(is_my_lexical_cast_enabled<T>::value)
 bool lexical_cast(const std::string &input, T &output)
 {
     output.s = input;
@@ -400,10 +401,10 @@ template <class X> class objWrapperRestricted
 // so this test will not compile in that compiler
 #if !defined(_MSC_VER) || _MSC_VER >= 1910
 
-static_assert(CLI::detail::is_direct_constructible<objWrapper<std::string>, std::string>::value,
+static_assert(cli::detail::direct_constructible<objWrapper<std::string>, std::string>,
               "string wrapper isn't properly constructible");
 
-static_assert(!std::is_assignable<objWrapper<std::string>, std::string>::value,
+static_assert(!std::is_assignable_v<objWrapper<std::string>, std::string>,
               "string wrapper is improperly assignable");
 TEST_CASE_METHOD(TApp, "stringWrapper", "[newparse]")
 {
@@ -416,14 +417,13 @@ TEST_CASE_METHOD(TApp, "stringWrapper", "[newparse]")
     CHECK("string test" == sWrapper.value());
 }
 
-static_assert(CLI::detail::is_direct_constructible<objWrapper<double>, double>::value,
+static_assert(cli::detail::direct_constructible<objWrapper<double>, double>,
               "double wrapper isn't properly assignable");
 
-static_assert(!CLI::detail::is_direct_constructible<objWrapper<double>, int>::value,
+static_assert(!cli::detail::direct_constructible<objWrapper<double>, int>,
               "double wrapper can be assigned from int");
 
-static_assert(!CLI::detail::is_istreamable<objWrapper<double>>::value,
-              "double wrapper is input streamable and it shouldn't be");
+static_assert(!cli::detail::istreamable<objWrapper<double>>, "double wrapper is input streamable and it shouldn't be");
 
 TEST_CASE_METHOD(TApp, "doubleWrapper", "[newparse]")
 {
@@ -437,7 +437,7 @@ TEST_CASE_METHOD(TApp, "doubleWrapper", "[newparse]")
 
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "intWrapperRestricted", "[newparse]")
@@ -452,7 +452,7 @@ TEST_CASE_METHOD(TApp, "intWrapperRestricted", "[newparse]")
 
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-v", ""};
 
@@ -461,14 +461,13 @@ TEST_CASE_METHOD(TApp, "intWrapperRestricted", "[newparse]")
     CHECK(0.0 == dWrapper.value());
 }
 
-static_assert(CLI::detail::is_direct_constructible<objWrapper<int>, int>::value,
+static_assert(cli::detail::direct_constructible<objWrapper<int>, int>,
               "int wrapper is not constructible from int64");
 
-static_assert(!CLI::detail::is_direct_constructible<objWrapper<int>, double>::value,
+static_assert(!cli::detail::direct_constructible<objWrapper<int>, double>,
               "int wrapper is constructible from double");
 
-static_assert(!CLI::detail::is_istreamable<objWrapper<int>>::value,
-              "int wrapper is input streamable and it shouldn't be");
+static_assert(!cli::detail::istreamable<objWrapper<int>>, "int wrapper is input streamable and it shouldn't be");
 
 TEST_CASE_METHOD(TApp, "intWrapper", "[newparse]")
 {
@@ -481,16 +480,15 @@ TEST_CASE_METHOD(TApp, "intWrapper", "[newparse]")
     CHECK(45 == iWrapper.value());
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
-static_assert(!CLI::detail::is_direct_constructible<objWrapper<float>, int>::value,
+static_assert(!cli::detail::direct_constructible<objWrapper<float>, int>,
               "float wrapper is constructible from int");
-static_assert(!CLI::detail::is_direct_constructible<objWrapper<float>, double>::value,
+static_assert(!cli::detail::direct_constructible<objWrapper<float>, double>,
               "float wrapper is constructible from double");
 
-static_assert(!CLI::detail::is_istreamable<objWrapper<float>>::value,
-              "float wrapper is input streamable and it shouldn't be");
+static_assert(!cli::detail::istreamable<objWrapper<float>>, "float wrapper is input streamable and it shouldn't be");
 
 TEST_CASE_METHOD(TApp, "floatWrapper", "[newparse]")
 {
@@ -503,7 +501,7 @@ TEST_CASE_METHOD(TApp, "floatWrapper", "[newparse]")
     CHECK(45.3f == iWrapper.value());
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 #endif
@@ -542,7 +540,7 @@ TEST_CASE_METHOD(TApp, "dobjWrapper", "[newparse]")
 
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
     iWrapper = dobjWrapper {};
 
     args = {"-v", "45.1"};
@@ -578,7 +576,7 @@ template <class X> class AobjWrapper
         X val_ {};
 };
 
-static_assert(std::is_assignable<AobjWrapper<std::uint16_t> &, std::uint16_t>::value,
+static_assert(std::is_assignable_v<AobjWrapper<std::uint16_t> &, std::uint16_t>,
               "AobjWrapper not assignable like it should be ");
 
 TEST_CASE_METHOD(TApp, "uint16Wrapper", "[newparse]")
@@ -592,15 +590,15 @@ TEST_CASE_METHOD(TApp, "uint16Wrapper", "[newparse]")
     CHECK(9u == sWrapper.value());
     args = {"-v", "thing"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-v", "72456245754"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 
     args = {"-v", "-3"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 template <class T> class SimpleWrapper
@@ -682,7 +680,7 @@ TEST_CASE_METHOD(TApp, "wrapperwrapperVector", "[newparse]")
 
     args = {"--val", "happy", "sad"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "wrapperComplex", "[newparse]")

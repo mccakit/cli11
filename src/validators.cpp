@@ -1,4 +1,20 @@
-// src/modules/validators.cppm
+/// @file
+/// @brief The validator type and the built-in validators.
+///
+/// A @ref cli::validator_t wraps a callable that inspects — and may rewrite — one
+/// value, returning an empty string on success or a message on failure. Attach
+/// one with `option->check(...)` or `option->transform(...)`.
+///
+/// Validators compose. `&` requires both to pass, `|` requires either, and `!`
+/// inverts, with the descriptions combined to match:
+///
+/// @code
+/// app.add_option("--f", file)->check(cli::existing_file & !cli::existing_directory);
+/// @endcode
+///
+/// The heavier validators — `is_member`, the transformers, and the unit parsers —
+/// live in the `extra_validators` partition.
+
 export module cli11:validators;
 
 import std;
@@ -7,49 +23,87 @@ import :string_tools;
 import :type_tools;
 import :encoding;
 
-export namespace CLI
+export namespace cli
 {
 
-    class Option;
+    class option_t;
 
-    class Validator
+    /// @brief A composable check applied to one command-line value.
+    class validator_t
     {
         protected:
-            std::function<std::string()> desc_function_ {[]() { return std::string {}; }};
-            std::function<std::string(std::string &)> func_ {[](std::string &) { return std::string {}; }};
+            /// @brief Produces the description shown in help output.
+            ///
+            /// A callable rather than a string so that a description can be built
+            /// lazily from the descriptions of composed validators.
+            std::function<std::string()> desc_function_ {[] { return std::string {}; }};
+
+            /// @brief The check itself.
+            ///
+            /// Returns an empty string on success, or a failure message. May rewrite
+            /// its argument unless @ref non_modifying_ is set.
+            std::function<std::string(std::string &)> func_ {[](std::string &)
+                                                                            { return std::string {}; }};
+
+            /// @brief The validator's name, used to find and replace it on an option.
             std::string name_ {};
+
+            /// @brief Which value this applies to, or `-1` for all of them.
             int application_index_ = -1;
+
+            /// @brief Whether the check runs at all.
             bool active_ {true};
+
+            /// @brief Whether the check is forbidden from rewriting its argument.
             bool non_modifying_ {false};
 
-            Validator(std::string validator_desc, std::function<std::string(std::string &)> func)
-                : desc_function_([validator_desc]() { return validator_desc; }), func_(std::move(func))
+            /// @brief Constructs a validator with a fixed description.
+            ///
+            /// @param validator_desc The description shown in help output.
+            /// @param func The check to run.
+            validator_t(std::string validator_desc, std::function<std::string(std::string &)> func)
+                : desc_function_([desc = std::move(validator_desc)] { return desc; }), func_(std::move(func))
             {
             }
 
         public:
-            Validator() = default;
+            validator_t() = default;
 
-            explicit Validator(std::string validator_desc)
-                : desc_function_([validator_desc]() { return validator_desc; })
+            /// @brief Constructs a validator that only carries a description.
+            ///
+            /// @param validator_desc The description shown in help output.
+            explicit validator_t(std::string validator_desc)
+                : desc_function_([desc = std::move(validator_desc)] { return desc; })
             {
             }
 
-            Validator(std::function<std::string(std::string &)> op,
-                      std::string validator_desc,
-                      std::string validator_name = "")
-                : desc_function_([validator_desc]() { return validator_desc; }), func_(std::move(op)),
+            /// @brief Constructs a named validator.
+            ///
+            /// @param op The check to run.
+            /// @param validator_desc The description shown in help output.
+            /// @param validator_name The name used to find this validator later.
+            validator_t(std::function<std::string(std::string &)> op, std::string validator_desc,
+                        std::string validator_name = "")
+                : desc_function_([desc = std::move(validator_desc)] { return desc; }), func_(std::move(op)),
                   name_(std::move(validator_name))
             {
             }
 
-            Validator &operation(std::function<std::string(std::string &)> op)
+            /// @brief Replaces the check.
+            ///
+            /// @param op The new check.
+            /// @return A reference to this validator, for chaining.
+            auto operation(std::function<std::string(std::string &)> op) -> validator_t &
             {
                 func_ = std::move(op);
                 return *this;
             }
 
-            std::string operator()(std::string &str) const
+            /// @brief Runs the check, possibly rewriting @p str.
+            ///
+            /// @param[in,out] str The value to check.
+            /// @return An empty string on success, otherwise a failure message.
+            auto operator()(std::string &str) const -> std::string
             {
                 std::string retstring;
                 if (active_)
@@ -67,26 +121,41 @@ export namespace CLI
                 return retstring;
             }
 
-            std::string operator()(const std::string &str) const
+            /// @brief Runs the check against a copy, leaving @p str untouched.
+            ///
+            /// @param str The value to check.
+            /// @return An empty string on success, otherwise a failure message.
+            auto operator()(const std::string &str) const -> std::string
             {
                 std::string value = str;
                 return (active_) ? func_(value) : std::string {};
             }
 
-            Validator &description(std::string validator_desc)
+            /// @brief Sets the description in place.
+            ///
+            /// @param validator_desc The new description.
+            /// @return A reference to this validator, for chaining.
+            auto description(std::string validator_desc) -> validator_t &
             {
-                desc_function_ = [validator_desc]() { return validator_desc; };
+                desc_function_ = [desc = std::move(validator_desc)] { return desc; };
                 return *this;
             }
 
-            [[nodiscard]] Validator description(std::string validator_desc) const
+            /// @brief Returns a copy carrying a different description.
+            ///
+            /// @param validator_desc The new description.
+            /// @return The modified copy.
+            [[nodiscard]] auto description(std::string validator_desc) const -> validator_t
             {
-                Validator newval(*this);
-                newval.desc_function_ = [validator_desc]() { return validator_desc; };
+                validator_t newval(*this);
+                newval.desc_function_ = [desc = std::move(validator_desc)] { return desc; };
                 return newval;
             }
 
-            [[nodiscard]] std::string get_description() const
+            /// @brief Returns the description shown in help output.
+            ///
+            /// @return The description, or an empty string if the validator is inactive.
+            [[nodiscard]] auto get_description() const -> std::string
             {
                 if (active_)
                 {
@@ -95,84 +164,127 @@ export namespace CLI
                 return std::string {};
             }
 
-            Validator &name(std::string validator_name)
+            /// @brief Sets the name in place.
+            ///
+            /// @param validator_name The new name.
+            /// @return A reference to this validator, for chaining.
+            auto name(std::string validator_name) -> validator_t &
             {
                 name_ = std::move(validator_name);
                 return *this;
             }
 
-            [[nodiscard]] Validator name(std::string validator_name) const
+            /// @brief Returns a copy carrying a different name.
+            ///
+            /// @param validator_name The new name.
+            /// @return The modified copy.
+            [[nodiscard]] auto name(std::string validator_name) const -> validator_t
             {
-                Validator newval(*this);
+                validator_t newval(*this);
                 newval.name_ = std::move(validator_name);
                 return newval;
             }
 
-            [[nodiscard]] const std::string &get_name() const
+            /// @brief Returns the validator's name.
+            ///
+            /// @return The name.
+            [[nodiscard]] auto get_name() const -> const std::string &
             {
                 return name_;
             }
 
-            Validator &active(bool active_val = true)
+            /// @brief Enables or disables the check in place.
+            ///
+            /// @param active_val Whether the check should run.
+            /// @return A reference to this validator, for chaining.
+            auto active(bool active_val = true) -> validator_t &
             {
                 active_ = active_val;
                 return *this;
             }
 
-            [[nodiscard]] Validator active(bool active_val = true) const
+            /// @brief Returns a copy that is enabled or disabled.
+            ///
+            /// @param active_val Whether the check should run.
+            /// @return The modified copy.
+            [[nodiscard]] auto active(bool active_val = true) const -> validator_t
             {
-                Validator newval(*this);
+                validator_t newval(*this);
                 newval.active_ = active_val;
                 return newval;
             }
 
-            [[nodiscard]] bool get_active() const
+            /// @brief Reports whether the check runs.
+            ///
+            /// @return `true` if the validator is active.
+            [[nodiscard]] auto get_active() const -> bool
             {
                 return active_;
             }
 
-            Validator &non_modifying(bool no_modify = true)
+            /// @brief Forbids or permits the check to rewrite its argument.
+            ///
+            /// @param no_modify Whether to forbid rewriting.
+            /// @return A reference to this validator, for chaining.
+            auto non_modifying(bool no_modify = true) -> validator_t &
             {
                 non_modifying_ = no_modify;
                 return *this;
             }
 
-            [[nodiscard]] bool get_modifying() const
+            /// @brief Reports whether the check may rewrite its argument.
+            ///
+            /// @return `true` if rewriting is permitted.
+            [[nodiscard]] auto get_modifying() const -> bool
             {
                 return !non_modifying_;
             }
 
-            Validator &application_index(int app_index)
+            /// @brief Sets which value the check applies to, in place.
+            ///
+            /// @param app_index The value index, or `-1` for all values.
+            /// @return A reference to this validator, for chaining.
+            auto application_index(int app_index) -> validator_t &
             {
                 application_index_ = app_index;
                 return *this;
             }
 
-            [[nodiscard]] Validator application_index(int app_index) const
+            /// @brief Returns a copy applying to a different value.
+            ///
+            /// @param app_index The value index, or `-1` for all values.
+            /// @return The modified copy.
+            [[nodiscard]] auto application_index(int app_index) const -> validator_t
             {
-                Validator newval(*this);
+                validator_t newval(*this);
                 newval.application_index_ = app_index;
                 return newval;
             }
 
-            [[nodiscard]] int get_application_index() const
+            /// @brief Returns which value the check applies to.
+            ///
+            /// @return The value index, or `-1` for all values.
+            [[nodiscard]] auto get_application_index() const -> int
             {
                 return application_index_;
             }
 
-            Validator operator&(const Validator &other) const
+            /// @brief Combines two validators so that both must pass.
+            ///
+            /// @param other The validator to combine with.
+            /// @return The combined validator.
+            auto operator&(const validator_t &other) const -> validator_t
             {
-                Validator newval;
+                validator_t newval;
                 newval._merge_description(*this, other, " AND ");
 
-                const std::function<std::string(std::string &)> &f1 = func_;
-                const std::function<std::string(std::string &)> &f2 = other.func_;
-
-                newval.func_ = [f1, f2](std::string &input) {
+                newval.func_ = [f1 = func_, f2 = other.func_](std::string &input) {
                     std::string s1 = f1(input);
                     std::string s2 = f2(input);
                     if (!s1.empty() && !s2.empty())
+                    {
                         return std::string("(") + s1 + ") AND (" + s2 + ")";
+                    }
                     return s1 + s2;
                 };
 
@@ -181,58 +293,68 @@ export namespace CLI
                 return newval;
             }
 
-            Validator operator|(const Validator &other) const
+            /// @brief Combines two validators so that either may pass.
+            ///
+            /// @param other The validator to combine with.
+            /// @return The combined validator.
+            auto operator|(const validator_t &other) const -> validator_t
             {
-                Validator newval;
+                validator_t newval;
                 newval._merge_description(*this, other, " OR ");
 
-                const std::function<std::string(std::string &)> &f1 = func_;
-                const std::function<std::string(std::string &)> &f2 = other.func_;
-
-                newval.func_ = [f1, f2](std::string &input) {
+                newval.func_ = [f1 = func_, f2 = other.func_](std::string &input) {
                     std::string s1 = f1(input);
                     std::string s2 = f2(input);
                     if (s1.empty() || s2.empty())
+                    {
                         return std::string();
+                    }
                     return std::string("(") + s1 + ") OR (" + s2 + ")";
                 };
+
                 newval.active_ = active_ && other.active_;
                 newval.application_index_ = application_index_;
                 return newval;
             }
 
-            Validator operator!() const
+            /// @brief Inverts a validator, so that passing becomes failing.
+            ///
+            /// @return The inverted validator.
+            auto operator!() const -> validator_t
             {
-                Validator newval;
-                const std::function<std::string()> &dfunc1 = desc_function_;
-                newval.desc_function_ = [dfunc1]() {
+                validator_t newval;
+
+                newval.desc_function_ = [dfunc1 = desc_function_] {
                     auto str = dfunc1();
                     return (!str.empty()) ? std::string("NOT ") + str : std::string {};
                 };
-                const std::function<std::string(std::string &)> &f1 = func_;
 
-                newval.func_ = [f1, dfunc1](std::string &test) -> std::string {
-                    std::string s1 = f1(test);
+                newval.func_ = [f1 = func_, dfunc1 = desc_function_](std::string &test) -> std::string {
+                    const std::string s1 = f1(test);
                     if (s1.empty())
                     {
                         return std::string("check ") + dfunc1() + " succeeded improperly";
                     }
                     return std::string {};
                 };
+
                 newval.active_ = active_;
                 newval.application_index_ = application_index_;
                 return newval;
             }
 
         private:
-            void _merge_description(const Validator &val1, const Validator &val2, const std::string &merger)
+            /// @brief Builds a combined description from two validators.
+            ///
+            /// @param val1 The left-hand validator.
+            /// @param val2 The right-hand validator.
+            /// @param merger The text placed between the two descriptions.
+            auto _merge_description(const validator_t &val1, const validator_t &val2,
+                                    const std::string &merger) -> void
             {
-                const std::function<std::string()> &dfunc1 = val1.desc_function_;
-                const std::function<std::string()> &dfunc2 = val2.desc_function_;
-
-                desc_function_ = [=]() {
-                    std::string f1 = dfunc1();
-                    std::string f2 = dfunc2();
+                desc_function_ = [dfunc1 = val1.desc_function_, dfunc2 = val2.desc_function_, merger] {
+                    const std::string f1 = dfunc1();
+                    const std::string f2 = dfunc2();
                     if ((f1.empty()) || (f2.empty()))
                     {
                         return f1 + f2;
@@ -242,35 +364,40 @@ export namespace CLI
             }
     };
 
-    using CustomValidator = Validator;
-
-    // --- Path checking ---
+    /// @brief A validator built from a user-supplied callable.
+    using custom_validator_t = validator_t;
 
     namespace detail
     {
 
-        enum class path_type : std::uint8_t
+        /// @brief What a path refers to on disk.
+        enum class path_type_t : std::uint8_t
         {
-            nonexistent,
-            file,
-            directory
+            nonexistent, ///< Nothing exists at the path.
+            file,        ///< Something other than a directory exists at the path.
+            directory    ///< A directory exists at the path.
         };
 
-        path_type check_path(const char *file) noexcept
+        /// @brief Reports what a path refers to.
+        ///
+        /// @param file The path to inspect.
+        /// @return What the path refers to; @ref path_type_t::nonexistent if it
+        /// cannot be inspected at all.
+        auto check_path(std::string_view file) noexcept -> path_type_t
         {
             std::error_code ec;
-            auto stat = std::filesystem::status(to_path(file), ec);
+            const auto stat = std::filesystem::status(to_path(file), ec);
             if (ec)
             {
-                return path_type::nonexistent;
+                return path_type_t::nonexistent;
             }
             switch (stat.type())
             {
             case std::filesystem::file_type::none:
             case std::filesystem::file_type::not_found:
-                return path_type::nonexistent;
+                return path_type_t::nonexistent;
             case std::filesystem::file_type::directory:
-                return path_type::directory;
+                return path_type_t::directory;
             case std::filesystem::file_type::symlink:
             case std::filesystem::file_type::block:
             case std::filesystem::file_type::character:
@@ -279,101 +406,112 @@ export namespace CLI
             case std::filesystem::file_type::regular:
             case std::filesystem::file_type::unknown:
             default:
-                return path_type::file;
+                return path_type_t::file;
             }
         }
 
     } // namespace detail
 
-    // --- Built-in Validators ---
-
-    const Validator ExistingFile {[](std::string &filename) {
-                                      auto path_result = detail::check_path(filename.c_str());
-                                      if (path_result == detail::path_type::nonexistent)
-                                      {
-                                          return "File does not exist: " + filename;
-                                      }
-                                      if (path_result == detail::path_type::directory)
-                                      {
-                                          return "File is actually a directory: " + filename;
-                                      }
-                                      return std::string();
-                                  },
-                                  "FILE"};
-
-    const Validator ExistingDirectory {[](std::string &filename) {
-                                           auto path_result = detail::check_path(filename.c_str());
-                                           if (path_result == detail::path_type::nonexistent)
-                                           {
-                                               return "Directory does not exist: " + filename;
-                                           }
-                                           if (path_result == detail::path_type::file)
-                                           {
-                                               return "Directory is actually a file: " + filename;
-                                           }
-                                           return std::string();
-                                       },
-                                       "DIR"};
-
-    const Validator ExistingPath {[](std::string &filename) {
-                                      auto path_result = detail::check_path(filename.c_str());
-                                      if (path_result == detail::path_type::nonexistent)
-                                      {
-                                          return "Path does not exist: " + filename;
-                                      }
-                                      return std::string();
-                                  },
-                                  "PATH(existing)"};
-
-    const Validator NonexistentPath {[](std::string &filename) {
-                                         auto path_result = detail::check_path(filename.c_str());
-                                         if (path_result != detail::path_type::nonexistent)
+    /// @brief Requires the value to name an existing file.
+    const validator_t existing_file {[](std::string &filename) {
+                                         const auto path_result = detail::check_path(filename);
+                                         if (path_result == detail::path_type_t::nonexistent)
                                          {
-                                             return "Path already exists: " + filename;
+                                             return "File does not exist: " + filename;
+                                         }
+                                         if (path_result == detail::path_type_t::directory)
+                                         {
+                                             return "File is actually a directory: " + filename;
                                          }
                                          return std::string();
                                      },
-                                     "PATH(non-existing)"};
+                                     "FILE"};
 
-    const Validator EscapedString {[](std::string &str) {
-                                       try
-                                       {
-                                           if (str.size() > 1 &&
-                                               (str.front() == '\"' || str.front() == '\'' || str.front() == '`') &&
-                                               str.front() == str.back())
-                                           {
-                                               detail::process_quoted_string(str);
-                                           }
-                                           else if (str.find_first_of('\\') != std::string::npos)
-                                           {
-                                               if (detail::is_binary_escaped_string(str))
-                                               {
-                                                   str = detail::extract_binary_string(str);
-                                               }
-                                               else
-                                               {
-                                                   str = detail::remove_escaped_characters(str);
-                                               }
-                                           }
-                                           return std::string {};
-                                       }
-                                       catch (const std::invalid_argument &ia)
-                                       {
-                                           return std::string(ia.what());
-                                       }
-                                   },
-                                   std::string {}};
+    /// @brief Requires the value to name an existing directory.
+    const validator_t existing_directory {[](std::string &filename) {
+                                              const auto path_result = detail::check_path(filename);
+                                              if (path_result == detail::path_type_t::nonexistent)
+                                              {
+                                                  return "Directory does not exist: " + filename;
+                                              }
+                                              if (path_result == detail::path_type_t::file)
+                                              {
+                                                  return "Directory is actually a file: " + filename;
+                                              }
+                                              return std::string();
+                                          },
+                                          "DIR"};
 
-    // --- FileOnDefaultPath ---
+    /// @brief Requires the value to name something that exists.
+    const validator_t existing_path {[](std::string &filename) {
+                                         const auto path_result = detail::check_path(filename);
+                                         if (path_result == detail::path_type_t::nonexistent)
+                                         {
+                                             return "Path does not exist: " + filename;
+                                         }
+                                         return std::string();
+                                     },
+                                     "PATH(existing)"};
 
-    class FileOnDefaultPath : public Validator
+    /// @brief Requires the value to name something that does not exist.
+    const validator_t nonexistent_path {[](std::string &filename) {
+                                            const auto path_result = detail::check_path(filename);
+                                            if (path_result != detail::path_type_t::nonexistent)
+                                            {
+                                                return "Path already exists: " + filename;
+                                            }
+                                            return std::string();
+                                        },
+                                        "PATH(non-existing)"};
+
+    /// @brief Resolves quoting and backslash escapes in the value.
+    ///
+    /// This rewrites its argument rather than only inspecting it.
+    const validator_t escaped_string {[](std::string &str) {
+                                          try
+                                          {
+                                              if (str.size() > 1 &&
+                                                  (str.front() == '\"' || str.front() == '\'' || str.front() == '`') &&
+                                                  str.front() == str.back())
+                                              {
+                                                  detail::process_quoted_string(str);
+                                              }
+                                              else if (str.find_first_of('\\') != std::string::npos)
+                                              {
+                                                  if (detail::is_binary_escaped_string(str))
+                                                  {
+                                                      str = detail::extract_binary_string(str);
+                                                  }
+                                                  else
+                                                  {
+                                                      str = detail::remove_escaped_characters(str);
+                                                  }
+                                              }
+                                              return std::string {};
+                                          }
+                                          catch (const std::invalid_argument &ia)
+                                          {
+                                              return std::string(ia.what());
+                                          }
+                                      },
+                                      std::string {}};
+
+    /// @brief Finds a file relative to a default directory when it is not found as given.
+    ///
+    /// On a match the value is rewritten to the resolved path.
+    class file_on_default_path_t : public validator_t
     {
         public:
-            explicit FileOnDefaultPath(std::string default_path, bool enableErrorReturn = true) : Validator("FILE")
+            /// @brief Constructs the validator.
+            ///
+            /// @param default_path The directory to search when the value does not resolve.
+            /// @param enable_error_return Report a failure when neither path resolves.
+            explicit file_on_default_path_t(std::string default_path, bool enable_error_return = true)
+                : validator_t("FILE")
             {
-                func_ = [default_path, enableErrorReturn](std::string &filename) {
-                    auto path_result = detail::check_path(filename.c_str());
-                    if (path_result == detail::path_type::nonexistent)
+                func_ = [default_path = std::move(default_path), enable_error_return](std::string &filename) {
+                    auto path_result = detail::check_path(filename);
+                    if (path_result == detail::path_type_t::nonexistent)
                     {
                         std::string test_file_path = default_path;
                         if (default_path.back() != '/' && default_path.back() != '\\')
@@ -381,14 +519,14 @@ export namespace CLI
                             test_file_path += '/';
                         }
                         test_file_path.append(filename);
-                        path_result = detail::check_path(test_file_path.c_str());
-                        if (path_result == detail::path_type::file)
+                        path_result = detail::check_path(test_file_path);
+                        if (path_result == detail::path_type_t::file)
                         {
                             filename = test_file_path;
                         }
                         else
                         {
-                            if (enableErrorReturn)
+                            if (enable_error_return)
                             {
                                 return "File does not exist: " + filename;
                             }
@@ -399,27 +537,34 @@ export namespace CLI
             }
     };
 
-    // --- Range ---
-
-    class Range : public Validator
+    /// @brief Requires the value to fall within a closed interval.
+    class range_t : public validator_t
     {
         public:
+            /// @brief Constructs a validator for the interval `[min_val, max_val]`.
+            ///
+            /// @tparam T The type the value is converted to before comparison.
+            /// @param min_val The lowest permitted value.
+            /// @param max_val The highest permitted value.
+            /// @param validator_name The validator's name; the description is
+            /// generated when this is empty.
             template <typename T>
-            Range(T min_val, T max_val, const std::string &validator_name = std::string {}) : Validator(validator_name)
+            range_t(T min_val, T max_val, const std::string &validator_name = std::string {})
+                : validator_t(validator_name)
             {
                 if (validator_name.empty())
                 {
-                    std::stringstream out;
+                    std::ostringstream out;
                     out << detail::type_name<T>() << " in [" << min_val << " - " << max_val << "]";
                     description(out.str());
                 }
                 func_ = [min_val, max_val](std::string &input) {
-                    using CLI::detail::lexical_cast;
+                    using detail::lexical_cast;
                     T val;
-                    bool converted = lexical_cast(input, val);
+                    const bool converted = lexical_cast(input, val);
                     if ((!converted) || (val < min_val || val > max_val))
                     {
-                        std::stringstream out;
+                        std::ostringstream out;
                         out << "Value " << input << " not in range [";
                         out << min_val << " - " << max_val << "]";
                         return out.str();
@@ -428,23 +573,36 @@ export namespace CLI
                 };
             }
 
+            /// @brief Constructs a validator for the interval `[0, max_val]`.
+            ///
+            /// @tparam T The type the value is converted to before comparison.
+            /// @param max_val The highest permitted value.
+            /// @param validator_name The validator's name.
             template <typename T>
-            explicit Range(T max_val, const std::string &validator_name = std::string {})
-                : Range(static_cast<T>(0), max_val, validator_name)
+            explicit range_t(T max_val, const std::string &validator_name = std::string {})
+                : range_t(static_cast<T>(0), max_val, validator_name)
             {
             }
     };
 
-    const Range NonNegativeNumber((std::numeric_limits<double>::max)(), "NONNEGATIVE");
+    /// @brief Requires the value to be zero or greater.
+    const range_t non_negative_number((std::numeric_limits<double>::max)(), "NONNEGATIVE");
 
-    const Range PositiveNumber((std::numeric_limits<double>::min)(), (std::numeric_limits<double>::max)(), "POSITIVE");
-
-    // --- Overflow / multiply checks ---
+    /// @brief Requires the value to be strictly greater than zero.
+    const range_t positive_number((std::numeric_limits<double>::min)(), (std::numeric_limits<double>::max)(),
+                                  "POSITIVE");
 
     namespace detail
     {
 
-        template <typename T> std::enable_if_t<std::is_signed_v<T>, T> overflowCheck(const T &a, const T &b)
+        /// @brief Reports whether multiplying two signed values would overflow.
+        ///
+        /// @param a The left operand.
+        /// @param b The right operand.
+        /// @return `true` if the product would not be representable.
+        template <typename T>
+            requires std::is_signed_v<T>
+        auto overflow_check(const T &a, const T &b) -> bool
         {
             if ((a > 0) == (b > 0))
             {
@@ -453,12 +611,26 @@ export namespace CLI
             return ((std::numeric_limits<T>::min)() / (std::abs)(a) > -(std::abs)(b));
         }
 
-        template <typename T> std::enable_if_t<!std::is_signed_v<T>, T> overflowCheck(const T &a, const T &b)
+        /// @brief Reports whether multiplying two unsigned values would overflow.
+        ///
+        /// @param a The left operand.
+        /// @param b The right operand.
+        /// @return `true` if the product would not be representable.
+        template <typename T>
+            requires(!std::is_signed_v<T>)
+        auto overflow_check(const T &a, const T &b) -> bool
         {
             return ((std::numeric_limits<T>::max)() / a < b);
         }
 
-        template <typename T> std::enable_if_t<std::is_integral_v<T>, bool> checked_multiply(T &a, T b)
+        /// @brief Multiplies in place, refusing to overflow.
+        ///
+        /// @param[in,out] a The value to multiply; left untouched on failure.
+        /// @param[in] b The multiplier.
+        /// @return `true` if the multiplication was performed.
+        template <typename T>
+            requires std::is_integral_v<T>
+        auto checked_multiply(T &a, T b) -> bool
         {
             if (a == 0 || b == 0 || a == 1 || b == 1)
             {
@@ -469,7 +641,7 @@ export namespace CLI
             {
                 return false;
             }
-            if (overflowCheck(a, b))
+            if (overflow_check(a, b))
             {
                 return false;
             }
@@ -477,9 +649,16 @@ export namespace CLI
             return true;
         }
 
-        template <typename T> std::enable_if_t<std::is_floating_point_v<T>, bool> checked_multiply(T &a, T b)
+        /// @brief Multiplies in place, refusing to produce an infinity.
+        ///
+        /// @param[in,out] a The value to multiply; left untouched on failure.
+        /// @param[in] b The multiplier.
+        /// @return `true` if the multiplication was performed.
+        template <typename T>
+            requires std::is_floating_point_v<T>
+        auto checked_multiply(T &a, T b) -> bool
         {
-            T c = a * b;
+            const T c = a * b;
             if (std::isinf(c) && !std::isinf(a) && !std::isinf(b))
             {
                 return false;
@@ -488,34 +667,53 @@ export namespace CLI
             return true;
         }
 
-        std::pair<std::string, std::string> split_program_name(std::string commandline)
+        /// @brief A command line split into the program and everything after it.
+        struct program_name_t
         {
-            std::pair<std::string, std::string> vals;
+                /// @brief The program name, with any surrounding quotes removed.
+                std::string name;
+
+                /// @brief The remainder of the command line.
+                std::string arguments;
+        };
+
+        /// @brief Separates the program name from the rest of a command line.
+        ///
+        /// The program name may contain spaces, so candidate prefixes are tested
+        /// against the filesystem until one names a file. Quoted program names are
+        /// unquoted, and escaped quotes within them are resolved.
+        ///
+        /// @param commandline The full command line.
+        /// @return The program name and the remaining arguments.
+        auto split_program_name(std::string commandline) -> program_name_t
+        {
+            program_name_t vals;
             trim(commandline);
             auto esp = commandline.find_first_of(' ', 1);
-            while (check_path(commandline.substr(0, esp).c_str()) != path_type::file)
+
+            while (check_path(commandline.substr(0, esp)) != path_type_t::file)
             {
                 esp = commandline.find_first_of(' ', esp + 1);
                 if (esp == std::string::npos)
                 {
                     if (commandline[0] == '"' || commandline[0] == '\'' || commandline[0] == '`')
                     {
-                        bool embeddedQuote = false;
-                        auto keyChar = commandline[0];
-                        auto end = commandline.find_first_of(keyChar, 1);
+                        bool embedded_quote = false;
+                        const auto key_char = commandline[0];
+                        auto end = commandline.find_first_of(key_char, 1);
                         while ((end != std::string::npos) && (commandline[end - 1] == '\\'))
                         {
-                            end = commandline.find_first_of(keyChar, end + 1);
-                            embeddedQuote = true;
+                            end = commandline.find_first_of(key_char, end + 1);
+                            embedded_quote = true;
                         }
                         if (end != std::string::npos)
                         {
-                            vals.first = commandline.substr(1, end - 1);
+                            vals.name = commandline.substr(1, end - 1);
                             esp = end + 1;
-                            if (embeddedQuote)
+                            if (embedded_quote)
                             {
-                                vals.first =
-                                    find_and_replace(vals.first, std::string("\\") + keyChar, std::string(1, keyChar));
+                                vals.name = find_and_replace(vals.name, std::string("\\") + key_char,
+                                                             std::string(1, key_char));
                             }
                         }
                         else
@@ -530,16 +728,17 @@ export namespace CLI
                     break;
                 }
             }
-            if (vals.first.empty())
+
+            if (vals.name.empty())
             {
-                vals.first = commandline.substr(0, esp);
-                rtrim(vals.first);
+                vals.name = commandline.substr(0, esp);
+                rtrim(vals.name);
             }
-            vals.second = (esp < commandline.length() - 1) ? commandline.substr(esp + 1) : std::string {};
-            ltrim(vals.second);
+            vals.arguments = (esp < commandline.length() - 1) ? commandline.substr(esp + 1) : std::string {};
+            ltrim(vals.arguments);
             return vals;
         }
 
     } // namespace detail
 
-} // namespace CLI
+} // namespace cli

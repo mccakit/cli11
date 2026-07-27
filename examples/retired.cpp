@@ -11,7 +11,7 @@ import cli11;
 int main(int argc, char **argv)
 {
 
-    CLI::App app("example for retired/deprecated options");
+    cli::app_t app("example for retired/deprecated options");
     std::vector<int> x;
     auto *opt1 = app.add_option("--retired_option2", x);
 
@@ -21,20 +21,20 @@ int main(int argc, char **argv)
     app.add_option("--not_deprecated", x);
 
     // specify that a non-existing option is retired
-    CLI::retire_option(app, "--retired_option");
+    cli::retire_option(app, "--retired_option");
 
     // specify that an existing option is retired and non-functional: this will replace the option with another that
     // behaves the same but does nothing
-    CLI::retire_option(app, opt1);
+    cli::retire_option(app, opt1);
 
     // deprecate an existing option and specify the recommended replacement
-    CLI::deprecate_option(opt2, "--not_deprecated");
+    cli::deprecate_option(opt2, "--not_deprecated");
 
     try
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

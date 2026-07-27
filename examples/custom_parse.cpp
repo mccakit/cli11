@@ -29,21 +29,21 @@ bool lexical_cast(const std::string &input, Values<double> & /*v*/)
 }
 
 DoubleValues doubles;
-void argparse(CLI::Option_group *group)
+void argparse(cli::option_group_t *group)
 {
     group->add_option("--dv", doubles)->default_str("0");
 }
 
 int main(int argc, char **argv)
 {
-    CLI::App app;
+    cli::app_t app;
 
     argparse(app.add_option_group("param"));
     try
     {
         app.parse(argc, argv);
     }
-    catch (const CLI::ParseError &e)
+    catch (const cli::parse_error_t &e)
     {
         return app.exit(e);
     }

@@ -21,7 +21,7 @@ TEST_CASE_METHOD(TApp, "BasicSubcommands", "[subcom]")
     CHECK(app.get_subcommand(sub1) == sub1);
     CHECK(app.get_subcommand("sub1") == sub1);
     CHECK(app.get_subcommand_no_throw("sub1") == sub1);
-    CHECK_THROWS_AS(app.get_subcommand("sub3"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_subcommand("sub3"), cli::option_not_found_t);
     CHECK_NOTHROW(app.get_subcommand_no_throw("sub3"));
     CHECK(app.get_subcommand_no_throw("sub3") == nullptr);
     run();
@@ -41,14 +41,14 @@ TEST_CASE_METHOD(TApp, "BasicSubcommands", "[subcom]")
     CHECK(app.get_subcommands().at(0) == sub2);
 
     args = {"SUb2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"SUb2"};
     try
     {
         run();
     }
-    catch (const CLI::ExtrasError &e)
+    catch (const cli::extras_error_t &e)
     {
         CHECK_THAT(e.what(), Contains("SUb2"));
     }
@@ -58,7 +58,7 @@ TEST_CASE_METHOD(TApp, "BasicSubcommands", "[subcom]")
     {
         run();
     }
-    catch (const CLI::ExtrasError &e)
+    catch (const cli::extras_error_t &e)
     {
         CHECK_THAT(e.what(), Contains("extra"));
     }
@@ -90,7 +90,7 @@ TEST_CASE_METHOD(TApp, "MultiSubFallthrough", "[subcom]")
     run();
 
     app.require_subcommand(1);
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub1"};
     run();
@@ -216,7 +216,7 @@ TEST_CASE_METHOD(TApp, "subcommandPrefixMultiple", "[subcom]")
     CHECK(1u == sub2->count());
 
     args = {"sub_"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     args = {"sub_long"};
     // now turning prefix matching off on main app but left on in subcommands
     app.allow_subcommand_prefix_matching(false);
@@ -251,7 +251,7 @@ TEST_CASE_METHOD(TApp, "RequiredAndSubcommands", "[subcom]")
     CHECK("foo" == baz);
 
     args = {"foo", "other"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "RequiredAndSubcomFallthrough", "[subcom]")
@@ -269,7 +269,7 @@ TEST_CASE_METHOD(TApp, "RequiredAndSubcomFallthrough", "[subcom]")
     CHECK("other" == baz);
 
     args = {"bar", "other2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "FooFooProblem", "[subcom]")
@@ -362,7 +362,7 @@ TEST_CASE_METHOD(TApp, "DuplicateSubcommandCallbacksValues", "[subcom]")
 TEST_CASE_METHOD(TApp, "Callbacks", "[subcom]")
 {
     auto *sub1 = app.add_subcommand("sub1");
-    sub1->callback([]() { throw CLI::Success(); });
+    sub1->callback([]() { throw cli::success_t(); });
     auto *sub2 = app.add_subcommand("sub2");
     bool val {false};
     sub2->callback([&val]() { val = true; });
@@ -464,32 +464,32 @@ TEST_CASE_METHOD(TApp, "CallbackOrder2_withFallthrough", "[subcom]")
 TEST_CASE_METHOD(TApp, "RuntimeErrorInCallback", "[subcom]")
 {
     auto *sub1 = app.add_subcommand("sub1");
-    sub1->callback([]() { throw CLI::RuntimeError(); });
+    sub1->callback([]() { throw cli::runtime_error_t(); });
     auto *sub2 = app.add_subcommand("sub2");
-    sub2->callback([]() { throw CLI::RuntimeError(2); });
+    sub2->callback([]() { throw cli::runtime_error_t(2); });
 
     args = {"sub1"};
-    CHECK_THROWS_AS(run(), CLI::RuntimeError);
+    CHECK_THROWS_AS(run(), cli::runtime_error_t);
 
     args = {"sub1"};
     try
     {
         run();
     }
-    catch (const CLI::RuntimeError &e)
+    catch (const cli::runtime_error_t &e)
     {
         CHECK(e.get_exit_code() == 1);
     }
 
     args = {"sub2"};
-    CHECK_THROWS_AS(run(), CLI::RuntimeError);
+    CHECK_THROWS_AS(run(), cli::runtime_error_t);
 
     args = {"sub2"};
     try
     {
         run();
     }
-    catch (const CLI::RuntimeError &e)
+    catch (const cli::runtime_error_t &e)
     {
         CHECK(e.get_exit_code() == 2);
     }
@@ -503,7 +503,7 @@ TEST_CASE_METHOD(TApp, "NoFallThroughOpts", "[subcom]")
     app.add_subcommand("sub");
 
     args = {"sub", "--val", "2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NoFallThroughPositionals", "[subcom]")
@@ -514,7 +514,7 @@ TEST_CASE_METHOD(TApp, "NoFallThroughPositionals", "[subcom]")
     app.add_subcommand("sub");
 
     args = {"sub", "2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "NoFallThroughOptsWithTerminator", "[subcom]")
@@ -834,7 +834,7 @@ TEST_CASE_METHOD(TApp, "RequiredSubCom", "[subcom]")
 
     app.require_subcommand();
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"sub1"};
     run();
@@ -874,13 +874,13 @@ TEST_CASE_METHOD(TApp, "Required1SubCom", "[subcom]")
     app.add_subcommand("sub2");
     app.add_subcommand("sub3");
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 
     args = {"sub1"};
     CHECK_NOTHROW(run());
 
     args = {"sub1", "sub2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "subcomNoSubComfallthrough", "[subcom]")
@@ -903,8 +903,8 @@ TEST_CASE_METHOD(TApp, "BadSubcommandSearch", "[subcom]")
     auto *one = app.add_subcommand("one");
     auto *two = one->add_subcommand("two");
 
-    CHECK_THROWS_AS(app.get_subcommand(two), CLI::OptionNotFound);
-    CHECK_THROWS_AS(app.get_subcommand_ptr(two), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_subcommand(two), cli::option_not_found_t);
+    CHECK_THROWS_AS(app.get_subcommand_ptr(two), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "PrefixProgram", "[subcom]")
@@ -930,7 +930,7 @@ TEST_CASE_METHOD(TApp, "PrefixNoSeparation", "[subcom]")
 
     args = {"--vals", "1", "2", "3", "other"};
 
-    CHECK_THROWS_AS(run(), CLI::ConversionError);
+    CHECK_THROWS_AS(run(), cli::conversion_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "PrefixSeparation", "[subcom]")
@@ -968,7 +968,7 @@ TEST_CASE_METHOD(TApp, "InheritHelpAllFlag", "[subcom]")
 {
     app.set_help_all_flag("--help-all");
     auto *subc = app.add_subcommand("subc");
-    auto help_opt_list = subc->get_options([](const CLI::Option *opt) { return opt->get_name() == "--help-all"; });
+    auto help_opt_list = subc->get_options([](const cli::option_t *opt) { return opt->get_name() == "--help-all"; });
     CHECK(1u == help_opt_list.size());
 }
 
@@ -977,10 +977,10 @@ TEST_CASE_METHOD(TApp, "RequiredPosInSubcommand", "[subcom]")
     app.require_subcommand();
     std::string bar;
 
-    CLI::App *fooApp = app.add_subcommand("foo", "Foo a bar");
+    cli::app_t *fooApp = app.add_subcommand("foo", "Foo a bar");
     fooApp->add_option("bar", bar, "A bar to foo")->required();
 
-    CLI::App *bazApp = app.add_subcommand("baz", "Baz a bar");
+    cli::app_t *bazApp = app.add_subcommand("baz", "Baz a bar");
     bazApp->add_option("bar", bar, "A bar a baz")->required();
 
     args = {"foo", "abc"};
@@ -991,7 +991,7 @@ TEST_CASE_METHOD(TApp, "RequiredPosInSubcommand", "[subcom]")
     CHECK("cba" == bar);
 
     args = {};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 // from  https://github.com/CLIUtils/CLI11/issues/1002
@@ -1019,7 +1019,7 @@ TEST_CASE_METHOD(TApp, "invalidSubcommandName", "[subcom]")
     {
         app.add_subcommand("!foo/foo", "Foo a bar");
     }
-    catch (const CLI::IncorrectConstruction &e)
+    catch (const cli::incorrect_construction_t &e)
     {
         gotError = true;
         CHECK_THAT(e.what(), Contains("!"));
@@ -1030,8 +1030,8 @@ TEST_CASE_METHOD(TApp, "invalidSubcommandName", "[subcom]")
 struct SubcommandProgram : public TApp
 {
 
-        CLI::App *start {nullptr};
-        CLI::App *stop {nullptr};
+        cli::app_t *start {nullptr};
+        cli::app_t *stop {nullptr};
 
         int dummy {0};
         std::string file {};
@@ -1068,14 +1068,14 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand Spare", "[subcom]")
 {
     args = {"extra", "-d", "start", "-ffilename"};
 
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand SpareSub", "[subcom]")
 {
     args = {"-d", "start", "spare", "-ffilename"};
 
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand Multiple", "[subcom]")
@@ -1092,7 +1092,7 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand MultipleOtherOrder", "[subcom]")
 {
     args = {"start", "-d", "-ffilename", "stop"};
 
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand MultipleArgs", "[subcom]")
@@ -1107,7 +1107,7 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand MultipleArgs", "[subcom]")
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand CaseCheck", "[subcom]")
 {
     args = {"Start"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"start"};
     run();
@@ -1128,11 +1128,11 @@ TEST_CASE_METHOD(TApp, "SubcomInheritCaseCheck", "[subcom]")
     run();
     CHECK(app.get_subcommands().empty());
     CHECK(app.get_subcommands({}).size() == 2u);
-    CHECK(app.get_subcommands([](const CLI::App *s) { return s->get_name() == "sub1"; }).size() == 1u);
+    CHECK(app.get_subcommands([](const cli::app_t *s) { return s->get_name() == "sub1"; }).size() == 1u);
 
     // check the const version of get_subcommands
     const auto &app_const = app;
-    CHECK(app_const.get_subcommands([](const CLI::App *s) { return s->get_name() == "sub1"; }).size() == 1u);
+    CHECK(app_const.get_subcommands([](const cli::app_t *s) { return s->get_name() == "sub1"; }).size() == 1u);
 
     args = {"SuB1"};
     run();
@@ -1150,7 +1150,7 @@ TEST_CASE_METHOD(TApp, "SubcomInheritCaseCheck", "[subcom]")
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand UnderscoreCheck", "[subcom]")
 {
     args = {"start_"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"start"};
     run();
@@ -1171,7 +1171,7 @@ TEST_CASE_METHOD(TApp, "SubcomInheritUnderscoreCheck", "[subcom]")
     run();
     CHECK(app.get_subcommands().empty());
     CHECK(app.get_subcommands({}).size() == 2u);
-    CHECK(app.get_subcommands([](const CLI::App *s) { return s->get_name() == "sub_option1"; }).size() == 1u);
+    CHECK(app.get_subcommands([](const cli::app_t *s) { return s->get_name() == "sub_option1"; }).size() == 1u);
 
     args = {"suboption1"};
     run();
@@ -1190,38 +1190,38 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand HelpOrder", "[subcom]")
 {
 
     args = {"-h"};
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 
     args = {"start", "-h"};
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 
     args = {"-h", "start"};
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand HelpAllOrder", "[subcom]")
 {
 
     args = {"--help-all"};
-    CHECK_THROWS_AS(run(), CLI::CallForAllHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_all_help_t);
 
     args = {"start", "--help-all"};
-    CHECK_THROWS_AS(run(), CLI::CallForAllHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_all_help_t);
 
     args = {"--help-all", "start"};
-    CHECK_THROWS_AS(run(), CLI::CallForAllHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_all_help_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand Callbacks", "[subcom]")
 {
 
-    start->callback([]() { throw CLI::Success(); });
+    start->callback([]() { throw cli::success_t(); });
 
     run();
 
     args = {"start"};
 
-    CHECK_THROWS_AS(run(), CLI::Success);
+    CHECK_THROWS_AS(run(), cli::success_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand Groups", "[subcom]")
@@ -1247,13 +1247,13 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand ExtrasErrors", "[subcom]")
 {
 
     args = {"one", "two", "start", "three", "four"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"start", "three", "four"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"one", "two"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(SubcommandProgram, "Subcommand OrderedExtras", "[subcom]")
@@ -1261,7 +1261,7 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand OrderedExtras", "[subcom]")
 
     app.allow_extras();
     args = {"one", "two", "start", "three", "four"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     start->allow_extras();
 
@@ -1341,10 +1341,10 @@ TEST_CASE_METHOD(SubcommandProgram, "Subcommand CallbackOrderImmediate", "[subco
 struct ManySubcommands : public TApp
 {
 
-        CLI::App *sub1 {nullptr};
-        CLI::App *sub2 {nullptr};
-        CLI::App *sub3 {nullptr};
-        CLI::App *sub4 {nullptr};
+        cli::app_t *sub1 {nullptr};
+        cli::app_t *sub2 {nullptr};
+        cli::app_t *sub3 {nullptr};
+        cli::app_t *sub4 {nullptr};
 
         ManySubcommands()
         {
@@ -1381,7 +1381,7 @@ TEST_CASE_METHOD(ManySubcommands, "Required4Failure", "[subcom]")
 {
     app.require_subcommand(4);
 
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "RemoveSub", "[subcom]")
@@ -1412,7 +1412,7 @@ TEST_CASE_METHOD(ManySubcommands, "manyIndexQuery", "[subcom]")
     CHECK(sub2 == s2);
     CHECK(sub3 == s3);
     CHECK(sub4 == s4);
-    CHECK_THROWS_AS(app.get_subcommand(4), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_subcommand(4), cli::option_not_found_t);
     auto *s0 = app.get_subcommand();
     CHECK(sub1 == s0);
 }
@@ -1427,7 +1427,7 @@ TEST_CASE_METHOD(ManySubcommands, "manyIndexQueryPtr", "[subcom]")
     CHECK(sub2 == s2.get());
     CHECK(sub3 == s3.get());
     CHECK(sub4 == s4.get());
-    CHECK_THROWS_AS(app.get_subcommand_ptr(4), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_subcommand_ptr(4), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "manyIndexQueryPtrByName", "[subcom]")
@@ -1440,7 +1440,7 @@ TEST_CASE_METHOD(ManySubcommands, "manyIndexQueryPtrByName", "[subcom]")
     CHECK(sub2 == s2.get());
     CHECK(sub3 == s3.get());
     CHECK(sub4 == s4.get());
-    CHECK_THROWS_AS(app.get_subcommand_ptr("sub5"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_subcommand_ptr("sub5"), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "Required1Fuzzy", "[subcom]")
@@ -1492,15 +1492,15 @@ TEST_CASE_METHOD(ManySubcommands, "HelpFlags", "[subcom]")
 
     args = {"-h"};
 
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 
     args = {"sub2", "-h"};
 
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 
     args = {"-h", "sub2"};
 
-    CHECK_THROWS_AS(run(), CLI::CallForHelp);
+    CHECK_THROWS_AS(run(), cli::call_for_help_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "MaxCommands", "[subcom]")
@@ -1529,7 +1529,7 @@ TEST_CASE_METHOD(ManySubcommands, "MaxCommands", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1", "sub2", "sub3"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "SubcommandExclusion", "[subcom]")
@@ -1541,7 +1541,7 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandExclusion", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1", "sub2", "sub3"};
-    CHECK_THROWS_AS(run(), CLI::ExcludesError);
+    CHECK_THROWS_AS(run(), cli::excludes_error_t);
 
     args = {"sub1", "sub2", "sub4"};
     CHECK_NOTHROW(run());
@@ -1563,20 +1563,20 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandOptionExclusion", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1", "sub3", "--exclude"};
-    CHECK_THROWS_AS(run(), CLI::ExcludesError);
+    CHECK_THROWS_AS(run(), cli::excludes_error_t);
     CHECK(sub1->remove_excludes(excluder_flag));
     CHECK_NOTHROW(run());
     CHECK(!sub1->remove_excludes(excluder_flag));
 
     args = {"--exclude", "sub2", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::ExcludesError);
+    CHECK_THROWS_AS(run(), cli::excludes_error_t);
     CHECK(sub1 == sub1->excludes(excluder_flag));
     args = {"sub1", "--exclude", "sub2", "sub4"};
     try
     {
         run();
     }
-    catch (const CLI::ExcludesError &ee)
+    catch (const cli::excludes_error_t &ee)
     {
         CHECK(std::string::npos != std::string(ee.what()).find("sub1"));
     }
@@ -1593,14 +1593,14 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandNeeds", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
 
     sub1->needs(sub3);
     args = {"sub1", "sub2", "sub3"};
     CHECK_NOTHROW(run());
 
     args = {"sub1", "sub2", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
 
     args = {"sub1", "sub2", "sub4"};
     sub1->remove_needs(sub3);
@@ -1617,7 +1617,7 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandNeedsOptions", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
 
     args = {"--subactive"};
     CHECK_NOTHROW(run());
@@ -1626,7 +1626,7 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandNeedsOptions", "[subcom]")
 
     sub1->needs(opt2);
     args = {"sub1", "--subactive"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
 
     args = {"--subactive", "--subactive2", "sub1"};
     CHECK_NOTHROW(run());
@@ -1645,7 +1645,7 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandNeedsOptionsCallbackOrdering", "[su
     sub1->fallthrough();
     sub1->parse_complete_callback([&count]() { ++count; });
     args = {"sub1", "--flag1", "sub1", "--subactive"};
-    CHECK_THROWS_AS(run(), CLI::RequiresError);
+    CHECK_THROWS_AS(run(), cli::requires_error_t);
     // the subcommand has to pass validation by the first callback
     sub1->immediate_callback(false);
     // now since the callback executes after
@@ -1674,9 +1674,9 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandNeedsFail", "[subcom]")
     auto *opt = app.add_flag("--subactive");
     auto *opt2 = app.add_flag("--dummy");
     sub1->needs(opt);
-    CHECK_THROWS_AS(sub1->needs((CLI::Option *)nullptr), CLI::OptionNotFound);
-    CHECK_THROWS_AS(sub1->needs((CLI::App *)nullptr), CLI::OptionNotFound);
-    CHECK_THROWS_AS(sub1->needs(sub1), CLI::OptionNotFound);
+    CHECK_THROWS_AS(sub1->needs((cli::option_t *)nullptr), cli::option_not_found_t);
+    CHECK_THROWS_AS(sub1->needs((cli::app_t *)nullptr), cli::option_not_found_t);
+    CHECK_THROWS_AS(sub1->needs(sub1), cli::option_not_found_t);
 
     CHECK(sub1->remove_needs(opt));
     CHECK(!sub1->remove_needs(opt2));
@@ -1694,7 +1694,7 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandRequired", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub3", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "SubcommandDisabled", "[subcom]")
@@ -1707,9 +1707,9 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandDisabled", "[subcom]")
     args = {"sub1", "sub2", "sub3"};
     app.allow_extras(false);
     sub2->allow_extras(false);
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     args = {"sub3", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     sub3->disabled(false);
     args = {"sub3", "sub4"};
     CHECK_NOTHROW(run());
@@ -1721,16 +1721,16 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandTriggeredOff", "[subcom]")
     app.allow_extras(false);
     sub1->allow_extras(false);
     sub2->allow_extras(false);
-    CLI::TriggerOff(sub1, sub2);
+    cli::trigger_off(sub1, sub2);
     args = {"sub1", "sub2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub2", "sub1", "sub3"};
     CHECK_NOTHROW(run());
-    CLI::TriggerOff(sub1, {sub3, sub4});
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    cli::trigger_off(sub1, {sub3, sub4});
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     args = {"sub1", "sub2", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "SubcommandTriggeredOn", "[subcom]")
@@ -1739,18 +1739,18 @@ TEST_CASE_METHOD(ManySubcommands, "SubcommandTriggeredOn", "[subcom]")
     app.allow_extras(false);
     sub1->allow_extras(false);
     sub2->allow_extras(false);
-    CLI::TriggerOn(sub1, sub2);
+    cli::trigger_on(sub1, sub2);
     args = {"sub1", "sub2"};
     CHECK_NOTHROW(run());
 
     args = {"sub2", "sub1", "sub4"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
-    CLI::TriggerOn(sub1, {sub3, sub4});
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
+    cli::trigger_on(sub1, {sub3, sub4});
     sub2->disabled_by_default(false);
     sub2->disabled(false);
     CHECK_NOTHROW(run());
     args = {"sub3", "sub1", "sub2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(ManySubcommands, "SubcommandSilence", "[subcom]")
@@ -1782,12 +1782,12 @@ TEST_CASE_METHOD(TApp, "UnnamedSub", "[subcom]")
     auto *opt2 = app.get_option("-v");
     CHECK(opt2 == opt);
 
-    CHECK_THROWS_AS(app.get_option("--vvvv"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(app.get_option("--vvvv"), cli::option_not_found_t);
     // now test in the constant context
     const auto &appC = app;
     const auto *opt3 = appC.get_option("-v");
     CHECK("--value" == opt3->get_name());
-    CHECK_THROWS_AS(appC.get_option("--vvvv"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(appC.get_option("--vvvv"), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "FallthroughFind", "[subcom]")
@@ -1809,7 +1809,7 @@ TEST_CASE_METHOD(TApp, "FallthroughFind", "[subcom]")
     opts = sub->get_options();
     CHECK(opts.size() == 2);
 
-    CHECK_THROWS_AS(sub->get_option("--global"), CLI::OptionNotFound);
+    CHECK_THROWS_AS(sub->get_option("--global"), cli::option_not_found_t);
 }
 
 TEST_CASE_METHOD(TApp, "FallthroughFind2level", "[subcom]")
@@ -1955,10 +1955,10 @@ TEST_CASE_METHOD(TApp, "SubcommandAliasIgnoreCaseUnderscore", "[subcom]")
     CHECK(-3.0 == val);
 
     args = {"SUB_2", "--value", "-5"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sUb_3", "-v", "7"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 }
 
 TEST_CASE_METHOD(TApp, "OptionGroupAlias", "[subcom]")
@@ -1969,7 +1969,7 @@ TEST_CASE_METHOD(TApp, "OptionGroupAlias", "[subcom]")
     sub->alias("sub3");
     sub->add_option("-v,--value", val);
     args = {"sub1", "-v", "-3"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub2", "--value", "-5"};
     run();
@@ -1992,7 +1992,7 @@ TEST_CASE_METHOD(TApp, "OptionGroupAliasWithSpaces", "[subcom]")
     sub->alias("sub3/b");
     sub->add_option("-v,--value", val);
     args = {"sub1", "-v", "-3"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub2 bb", "--value", "-5"};
     run();
@@ -2012,14 +2012,14 @@ TEST_CASE_METHOD(TApp, "subcommand_help", "[subcom]")
     auto *sub1 = app.add_subcommand("help")->silent();
     bool flag {false};
     app.add_flag("--one", flag, "FLAGGER");
-    sub1->parse_complete_callback([]() { throw CLI::CallForHelp(); });
+    sub1->parse_complete_callback([]() { throw cli::call_for_help_t(); });
     bool called {false};
     args = {"help"};
     try
     {
         run();
     }
-    catch (const CLI::CallForHelp &)
+    catch (const cli::call_for_help_t &)
     {
         called = true;
     }
@@ -2036,16 +2036,16 @@ TEST_CASE_METHOD(TApp, "DuplicateErrors", "[subcom]")
     app.add_option("--quit");
     auto *sub1 = app.add_option_group("sub1");
 
-    CHECK_THROWS_AS(sub1->add_option("-t"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("--t"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("t"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("-m"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("--m"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("m"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("quit"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->add_option("--quit"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub1->add_option("-t"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("--t"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("t"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("-m"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("--m"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("m"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("quit"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->add_option("--quit"), cli::option_already_added_t);
     sub1->allow_non_standard_option_names();
-    CHECK_THROWS_AS(sub1->add_option("-quit"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub1->add_option("-quit"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "AliasErrors", "[subcom]")
@@ -2053,28 +2053,28 @@ TEST_CASE_METHOD(TApp, "AliasErrors", "[subcom]")
     auto *sub1 = app.add_subcommand("sub1");
     auto *sub2 = app.add_subcommand("sub2");
 
-    CHECK_THROWS_AS(sub2->alias("this is a not\n a valid alias"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(sub2->alias("this is a not\n a valid alias"), cli::incorrect_construction_t);
     CHECK_NOTHROW(sub2->alias("-alias")); // this is allowed but would be unusable on command line parsers
 
     CHECK_THROWS_AS(app.add_subcommand("--bad_subcommand_name", "documenting the bad subcommand"),
-                    CLI::IncorrectConstruction);
+                    cli::incorrect_construction_t);
 
-    CHECK_THROWS_AS(app.add_subcommand("documenting a subcommand", "sub3"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app.add_subcommand("documenting a subcommand", "sub3"), cli::incorrect_construction_t);
     // cannot alias to an existing subcommand
-    CHECK_THROWS_AS(sub2->alias("sub1"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->alias("sub2"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("sub1"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->alias("sub2"), cli::option_already_added_t);
     // aliasing to an existing name should be allowed
     CHECK_NOTHROW(sub1->alias(sub1->get_name()));
 
     sub1->alias("les1")->alias("les2")->alias("les_3");
     sub2->alias("s2les1")->alias("s2les2")->alias("s2les3");
 
-    CHECK_THROWS_AS(sub2->alias("les2"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->alias("s2les2"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("les2"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->alias("s2les2"), cli::option_already_added_t);
 
-    CHECK_THROWS_AS(sub2->name("sub1"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->name("sub1"), cli::option_already_added_t);
     sub2->ignore_underscore();
-    CHECK_THROWS_AS(sub2->alias("les3"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("les3"), cli::option_already_added_t);
 }
 
 TEST_CASE_METHOD(TApp, "DuplicateErrorsPrefix", "[subcom]")
@@ -2083,22 +2083,22 @@ TEST_CASE_METHOD(TApp, "DuplicateErrorsPrefix", "[subcom]")
     auto *sub1 = app.add_subcommand("sub_test");
     auto *sub2 = app.add_subcommand("sub_deploy");
 
-    CHECK_THROWS_AS(app.add_subcommand("sub"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(app.add_subcommand("sub"), cli::option_already_added_t);
     // cannot alias to an existing subcommand
-    CHECK_THROWS_AS(sub2->alias("sub"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("sub"), cli::option_already_added_t);
     app.ignore_case();
     // this needs to be opposite of the subcommand the alias is being tested on to check for ambiguity
     sub2->ignore_case();
-    CHECK_THROWS_AS(sub1->alias("SUB_"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub1->alias("SUB_"), cli::option_already_added_t);
     app.ignore_underscore();
     sub1->ignore_underscore();
-    CHECK_THROWS_AS(sub2->alias("su_bt"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("su_bt"), cli::option_already_added_t);
 }
 
 // test adding a subcommand via the pointer
 TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[subcom]")
 {
-    auto sshared = std::make_shared<CLI::App>("documenting the subcommand", "sub1");
+    auto sshared = std::make_shared<cli::app_t>("documenting the subcommand", "sub1");
     sshared->alias("sub2")->alias("sub3");
 
     CHECK("sub1" == sshared->get_name());
@@ -2110,7 +2110,7 @@ TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[subcom]")
         // this should throw the next line should never be reached
         CHECK(!true);
     }
-    catch (const CLI::OptionAlreadyAdded &oaa)
+    catch (const cli::option_already_added_t &oaa)
     {
         CHECK_THAT(oaa.what(), Contains("sub1"));
     }
@@ -2123,7 +2123,7 @@ TEST_CASE_METHOD(TApp, "ExistingSubcommandMatch", "[subcom]")
         // this should throw the next line should never be reached
         CHECK(!true);
     }
-    catch (const CLI::OptionAlreadyAdded &oaa)
+    catch (const cli::option_already_added_t &oaa)
     {
         CHECK_THAT(oaa.what(), Contains("sub2"));
     }
@@ -2140,34 +2140,34 @@ TEST_CASE_METHOD(TApp, "AliasErrorsInOptionGroup", "[subcom]")
     auto *sub2 = g2->add_subcommand("sub2");
 
     // cannot alias to an existing subcommand even if it is in an option group
-    CHECK_THROWS_AS(sub2->alias("sub1"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->alias("sub2"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("sub1"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->alias("sub2"), cli::option_already_added_t);
 
     sub1->alias("les1")->alias("les2")->alias("les3");
     sub2->alias("s2les1")->alias("s2les2")->alias("s2les3");
 
-    CHECK_THROWS_AS(sub2->alias("les2"), CLI::OptionAlreadyAdded);
-    CHECK_THROWS_AS(sub1->alias("s2les2"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->alias("les2"), cli::option_already_added_t);
+    CHECK_THROWS_AS(sub1->alias("s2les2"), cli::option_already_added_t);
 
-    CHECK_THROWS_AS(sub2->name("sub1"), CLI::OptionAlreadyAdded);
+    CHECK_THROWS_AS(sub2->name("sub1"), cli::option_already_added_t);
 }
 
 TEST_CASE("SharedSubTests: SharedSubcommand", "[subcom]")
 {
     double val {0.0}, val2 {0.0}, val3 {0.0}, val4 {0.0};
-    CLI::App app1 {"test program1"};
+    cli::app_t app1 {"test program1"};
 
     app1.add_option("-t", val2);
     auto *sub = app1.add_subcommand("", "empty name");
     sub->add_option("-v,--value", val);
     sub->add_option("-g", val4);
-    CLI::App app2 {"test program2"};
+    cli::app_t app2 {"test program2"};
     app2.add_option("-m", val3);
     // extract an owning ptr from app1 and add it to app2
     auto subown = app1.get_subcommand_ptr(sub);
     // add the extracted subcommand to a different app
     app2.add_subcommand(std::move(subown));
-    CHECK_THROWS_AS(app2.add_subcommand(CLI::App_p {}), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(app2.add_subcommand(cli::app_ptr_t {}), cli::incorrect_construction_t);
     input_t args1 = {"-m", "4.56", "-t", "5.93", "-v", "-3"};
     input_t args2 = {"-m", "4.56", "-g", "8.235"};
     std::reverse(std::begin(args1), std::end(args1));
@@ -2186,7 +2186,7 @@ TEST_CASE("SharedSubTests: SharedSubcommand", "[subcom]")
 TEST_CASE("SharedSubTests: SharedSubIndependent", "[subcom]")
 {
     double val {0.0}, val2 {0.0}, val4 {0.0};
-    CLI::App_p app1 = std::make_shared<CLI::App>("test program1");
+    cli::app_ptr_t app1 = std::make_shared<cli::app_t>("test program1");
     app1->allow_extras();
     app1->add_option("-t", val2);
     auto *sub = app1->add_subcommand("", "empty name");
@@ -2215,7 +2215,7 @@ TEST_CASE("SharedSubTests: SharedSubIndependent", "[subcom]")
 TEST_CASE("SharedSubTests: SharedSubIndependentReuse", "[subcom]")
 {
     double val {0.0}, val2 {0.0}, val4 {0.0};
-    CLI::App_p app1 = std::make_shared<CLI::App>("test program1");
+    cli::app_ptr_t app1 = std::make_shared<cli::app_t>("test program1");
     app1->allow_extras();
     app1->add_option("-t", val2);
     auto *sub = app1->add_subcommand("", "empty name");
@@ -2247,11 +2247,11 @@ TEST_CASE("SharedSubTests: SharedSubIndependentReuse", "[subcom]")
 
 TEST_CASE_METHOD(ManySubcommands, "getSubtests", "[subcom]")
 {
-    CLI::App_p sub2p = app.get_subcommand_ptr(sub2);
+    cli::app_ptr_t sub2p = app.get_subcommand_ptr(sub2);
     CHECK(sub2 == sub2p.get());
-    CHECK_THROWS_AS(app.get_subcommand_ptr(nullptr), CLI::OptionNotFound);
-    CHECK_THROWS_AS(app.get_subcommand(nullptr), CLI::OptionNotFound);
-    CLI::App_p sub3p = app.get_subcommand_ptr(2);
+    CHECK_THROWS_AS(app.get_subcommand_ptr(nullptr), cli::option_not_found_t);
+    CHECK_THROWS_AS(app.get_subcommand(nullptr), cli::option_not_found_t);
+    cli::app_ptr_t sub3p = app.get_subcommand_ptr(2);
     CHECK(sub3 == sub3p.get());
 }
 
@@ -2455,7 +2455,7 @@ TEST_CASE_METHOD(TApp, "DotNotationSubcommandRecursive", "[subcom]")
     CHECK(v2 == "val2");
 
     args = {"--sub1.sub2.bob", "val2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
     app.allow_extras();
     CHECK_NOTHROW(run());
     auto extras = app.remaining();
@@ -2484,13 +2484,13 @@ TEST_CASE_METHOD(TApp, "DotNotationSubcommandRecursive2", "[subcom]")
     CHECK(v2 == "val2");
 
     args = {"sub1.bob", "--value", "val2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub1.sub2.bob", "--value", "val2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     args = {"sub1.sub2.sub3.bob", "--value", "val2"};
-    CHECK_THROWS_AS(run(), CLI::ExtrasError);
+    CHECK_THROWS_AS(run(), cli::extras_error_t);
 
     app.allow_extras();
     CHECK_NOTHROW(run());
@@ -2505,7 +2505,7 @@ TEST_CASE_METHOD(TApp, "subcommandEnvironmentName", "[subcom]")
     auto *sub1 = app.add_subcommand("sub1");
     std::string someFile;
     int sub1value {0};
-    sub1->add_option("-f,--file", someFile)->envname("SOME_FILE")->required()->check(CLI::ExistingFile);
+    sub1->add_option("-f,--file", someFile)->envname("SOME_FILE")->required()->check(cli::existing_file);
     sub1->add_option("-v", sub1value);
     auto *sub2 = app.add_subcommand("sub2");
     int completelyUnrelatedToSub1 = 0;
@@ -2519,6 +2519,6 @@ TEST_CASE_METHOD(TApp, "subcommandEnvironmentName", "[subcom]")
     CHECK_NOTHROW(run());
 
     args = {"sub1", "-v", "111"};
-    CHECK_THROWS_AS(run(), CLI::RequiredError);
+    CHECK_THROWS_AS(run(), cli::required_error_t);
     unset_env("SOME_FILE");
 }
